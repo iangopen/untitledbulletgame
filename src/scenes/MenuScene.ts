@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import { VIEW, space, theme, type } from '../render/theme';
+import { VIEW, theme } from '../render/theme';
 import { parseRosterParam } from '../director/roster';
-import { drawShape, enter, go, hint, label, nudge, pop, setColor } from './ui';
+import { at, h, replay, shape } from '../ui/dom';
+import { enter, go, mountScreen } from './ui';
 
 interface Option {
   text: string;
@@ -17,10 +18,10 @@ const OPTIONS: Option[] = [
 /** The ?roster= dev shortcut applies once per page load, not every time the menu opens. */
 let shortcutConsumed = false;
 
+/** Title and mode select. State (selected index) lives here; the DOM only renders it and forwards input. */
 export class MenuScene extends Phaser.Scene {
   private index = 0;
-  private items: Phaser.GameObjects.Text[] = [];
-  private marker!: Phaser.GameObjects.Graphics;
+  private rows: HTMLElement[] = [];
 
   constructor() {
     super('Menu');
@@ -38,24 +39,35 @@ export class MenuScene extends Phaser.Scene {
 
     enter(this);
     const { cx } = VIEW;
-    const g = this.add.graphics();
+    const screen = h('div');
     // Mark: the soul (red circle, the one accent) between two hazard shapes.
-    drawShape(g, 'triangle', cx - 56, 214, 20, theme.prism);
-    drawShape(g, 'circle', cx, 216, 11, theme.soul);
-    drawShape(g, 'square', cx + 56, 216, 18, theme.bulletNormal);
-    label(this, cx, 300, 'untitled bullet game', { size: type.title, weight: 600 });
+    screen.append(
+      at(shape('triangle', theme.prism, 20), cx - 56, 214),
+      at(shape('circle', theme.soul, 11), cx, 216),
+      at(shape('square', theme.bulletNormal, 18), cx + 56, 216),
+      at(h('div', 't-title', 'untitled bullet game'), cx, 300),
+    );
 
-    this.items = OPTIONS.map((o, i) => {
-      const y = 420 + i * (type.label + space.md);
-      const t = label(this, cx, y, o.text, { size: type.label, color: o.available ? theme.text : theme.textMuted });
-      if (o.note) label(this, cx + t.width / 2 + space.sm, y + 2, o.note, { size: type.hint, color: theme.textMuted, align: 'left' });
-      return t;
+    this.rows = OPTIONS.map((o, i) => {
+      const row = at(h('div', `opt t-label ${o.available ? 'click' : 'off no'}`), cx, 420 + i * 50);
+      row.append(h('span', 'dot'), h('span', '', o.text));
+      if (o.note) row.append(h('span', 'note', o.note));
+      // Hover selects (same state as the keyboard); locked options ignore the mouse.
+      if (o.available) {
+        row.addEventListener('mouseenter', () => this.setIndex(i));
+        row.addEventListener('click', () => {
+          this.setIndex(i);
+          this.choose();
+        });
+      }
+      screen.append(row);
+      return row;
     });
-    this.marker = this.add.graphics();
-    hint(this, '↑ ↓ choose    enter select');
+    screen.append(at(h('div', 't-hint', '↑ ↓ choose    enter select'), cx, VIEW.height - 40));
+    mountScreen(this, screen);
 
     this.index = 0;
-    this.refresh();
+    this.render();
     const kb = this.input.keyboard!;
     kb.on('keydown-UP', () => this.move(-1));
     kb.on('keydown-DOWN', () => this.move(1));
@@ -65,26 +77,25 @@ export class MenuScene extends Phaser.Scene {
     kb.on('keydown-SPACE', () => this.choose());
   }
 
-  private move(d: number): void {
-    this.index = (this.index + d + OPTIONS.length) % OPTIONS.length;
-    this.refresh();
-    pop(this, this.items[this.index]!, 1.08);
+  private setIndex(i: number): void {
+    if (i === this.index) return;
+    this.index = i;
+    this.render();
   }
 
-  private refresh(): void {
-    this.items.forEach((t, i) => {
-      const o = OPTIONS[i]!;
-      setColor(t, i === this.index ? (o.available ? theme.text : theme.textDim) : o.available ? theme.textDim : theme.textMuted);
-    });
-    const t = this.items[this.index]!;
-    this.marker.clear();
-    drawShape(this.marker, 'circle', t.x - t.width / 2 - space.md, t.y, 6, theme.soul);
+  private move(d: number): void {
+    this.setIndex((this.index + d + OPTIONS.length) % OPTIONS.length);
+    replay(this.rows[this.index]!, 'pop');
+  }
+
+  private render(): void {
+    this.rows.forEach((r, i) => r.classList.toggle('sel', i === this.index));
   }
 
   private choose(): void {
     const o = OPTIONS[this.index]!;
     if (!o.available) {
-      nudge(this, this.items[this.index]!);
+      replay(this.rows[this.index]!, 'nudge');
       return;
     }
     go(this, 'Roster');

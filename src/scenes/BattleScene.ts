@@ -1,13 +1,14 @@
 import Phaser from 'phaser';
 import { World } from '../core/World';
 import { BattleView } from '../render/BattleView';
-import { VIEW, space, theme, type } from '../render/theme';
+import { VIEW, space, theme, toCss, type } from '../render/theme';
 import { FixedLoop } from './FixedLoop';
 import { Director } from '../director/Director';
 import { TimerMode } from '../director/modes/TimerMode';
 import { DEFAULT_ROSTER, normalizeRoster, type Roster } from '../director/roster';
 import { registry } from '../characters/registry';
-import { drawShape, enter, go, hint, label, pop, setColor } from './ui';
+import { at, h, replay } from '../ui/dom';
+import { enter, go, mountScreen } from './ui';
 import { px } from '../tuning';
 
 export interface BattleData {
@@ -25,22 +26,30 @@ function devDuration(): number | undefined {
   return Number.isFinite(v) && v > 0 ? v : undefined;
 }
 
-/** Draws the battle and reads input. The Director owns time, characters and the outcome. */
+/**
+ * Draws the battle (canvas) and its HUD/pause (HTML layer) and reads input.
+ * The Director owns time, characters and the outcome; this scene owns pause state.
+ * Movement is keyboard-only; the mouse only works in the pause menu.
+ */
 export class BattleScene extends Phaser.Scene {
   private world!: World;
   private view!: BattleView;
   private loop!: FixedLoop;
   private director!: Director;
   private roster!: Roster;
-  private timerText!: Phaser.GameObjects.Text;
   private paused = false;
-  private pauseLayer!: Phaser.GameObjects.Container;
-  private pauseItems: Phaser.GameObjects.Text[] = [];
   private pauseIndex = 0;
-  private pauseMarker!: Phaser.GameObjects.Graphics;
-  private hintText!: Phaser.GameObjects.Text;
   private ending = false;
   private lastShownSecond = -1;
+  // HTML layer
+  private timerEl!: HTMLElement;
+  private hpEl!: HTMLElement;
+  private hintEl!: HTMLElement;
+  private pauseBtn!: HTMLElement;
+  private pauseEl!: HTMLElement;
+  private pauseItems: HTMLElement[] = [];
+  private shownTimer = '';
+  private shownHp = '';
 
   constructor() {
     super('Battle');
@@ -57,23 +66,16 @@ export class BattleScene extends Phaser.Scene {
     this.paused = false;
     this.ending = false;
     this.lastShownSecond = -1;
+    this.shownTimer = '';
+    this.shownHp = '';
 
-    // HUD: countdown top center (the one bright element), roster summary top left, one quiet hint.
-    this.timerText = label(this, VIEW.cx, 92, '', { size: type.number, mono: true });
-    const summary = registry
-      .filter((e) => (this.roster[e.id] ?? 0) > 0)
-      .map((e) => `${e.name} ${this.roster[e.id]}`)
-      .join('    ');
-    label(this, space.lg, space.lg, summary || 'no opponents', { size: type.small, align: 'left', color: theme.textDim });
-    this.hintText = hint(this, 'arrows move    shift slow    esc pause');
-
-    this.buildPause();
+    this.buildHud();
     const kb = this.input.keyboard!;
     kb.on('keydown-ESC', () => (this.paused ? this.resume() : this.pause()));
-    kb.on('keydown-UP', () => this.paused && this.movePause(-1));
-    kb.on('keydown-DOWN', () => this.paused && this.movePause(1));
-    kb.on('keydown-ENTER', () => this.paused && this.choosePause());
-    kb.on('keydown-SPACE', () => this.paused && this.choosePause());
+    kb.on('keydown-UP', () => this.paused && this.setPause(this.pauseIndex - 1, true));
+    kb.on('keydown-DOWN', () => this.paused && this.setPause(this.pauseIndex + 1, true));
+    kb.on('keydown-ENTER', () => this.paused && this.choosePause(this.pauseIndex));
+    kb.on('keydown-SPACE', () => this.paused && this.choosePause(this.pauseIndex));
     if (import.meta.env.DEV) {
       kb.on('keydown-H', () => (this.view.showHitboxes = !this.view.showHitboxes));
       kb.on('keydown-BACKTICK', () => this.scene.start('Debug'));
@@ -82,72 +84,111 @@ export class BattleScene extends Phaser.Scene {
       };
     }
     this.events.once('shutdown', () => this.director.dispose());
-    this.updateTimer();
+    this.updateHud();
   }
 
-  private buildPause(): void {
-    const bg = this.add.graphics();
-    bg.fillStyle(theme.background, 0.88);
-    // Oversized so camera shake never reveals an edge.
-    bg.fillRect(-VIEW.width, -VIEW.height, VIEW.width * 3, VIEW.height * 3);
-    const title = label(this, VIEW.cx, 250, 'Paused', { size: type.title, weight: 600 });
-    this.pauseItems = PAUSE_OPTIONS.map((t, i) => label(this, VIEW.cx, 360 + i * (type.label + space.md), t, { size: type.label }));
-    this.pauseMarker = this.add.graphics();
-    const quiet = label(this, VIEW.cx, VIEW.height - 40, '↑ ↓ choose    enter select    esc resume', { size: type.hint, color: theme.textMuted });
-    this.pauseLayer = this.add.container(0, 0, [bg, title, ...this.pauseItems, this.pauseMarker, quiet]).setDepth(10).setVisible(false);
+  private buildHud(): void {
+    const screen = h('div');
+    // HUD: countdown top center, roster summary top left, hp value beside the canvas bar, one quiet hint.
+    this.timerEl = at(h('div', 't-number mono'), VIEW.cx, 92);
+    const summary = registry
+      .filter((e) => (this.roster[e.id] ?? 0) > 0)
+      .map((e) => `${e.name} ${this.roster[e.id]}`)
+      .join('    ');
+    const bar = this.view.hpBar;
+    const midY = bar.y + bar.h / 2;
+    this.hpEl = at(h('div', 't-small mono dim'), bar.x + bar.w + 16, midY, 'left');
+    // Mouse route to pause (Esc still works).
+    this.pauseBtn = at(h('div', 't-small hud-btn click', 'pause'), VIEW.width - space.lg, space.lg, 'right');
+    this.pauseBtn.addEventListener('click', () => (this.paused ? this.resume() : this.pause()));
+    this.hintEl = at(h('div', 't-hint', 'arrows move    shift slow    esc pause'), VIEW.cx, VIEW.height - 40);
+    screen.append(
+      this.timerEl,
+      at(h('div', 't-small dim', summary || 'no opponents'), space.lg, space.lg, 'left'),
+      at(h('div', 't-small dim', 'hp'), bar.x - 16, midY, 'right'),
+      this.hpEl,
+      this.hintEl,
+      this.pauseBtn,
+    );
+
+    // Pause overlay (hidden until Esc). The backdrop swallows clicks so nothing reaches the battle.
+    this.pauseEl = h('div');
+    this.pauseEl.style.display = 'none';
+    this.pauseEl.append(h('div', 'backdrop'), at(h('div', 't-title', 'Paused'), VIEW.cx, 250));
+    this.pauseItems = PAUSE_OPTIONS.map((t, i) => {
+      const item = at(h('div', 'opt t-label click'), VIEW.cx, 360 + i * (type.label + space.md));
+      item.append(h('span', 'dot'), h('span', '', t));
+      item.addEventListener('mouseenter', () => this.setPause(i, false));
+      item.addEventListener('click', () => this.choosePause(i));
+      return item;
+    });
+    this.pauseEl.append(...this.pauseItems, at(h('div', 't-hint', '↑ ↓ choose    enter select    esc resume'), VIEW.cx, VIEW.height - 40));
+    screen.append(this.pauseEl);
+    mountScreen(this, screen);
   }
 
   private pause(): void {
     if (this.ending) return;
     this.paused = true;
     this.pauseIndex = 0;
-    this.refreshPause();
-    this.pauseLayer.setVisible(true).setAlpha(0);
-    this.hintText.setVisible(false);
-    this.tweens.add({ targets: this.pauseLayer, alpha: 1, duration: 90 });
+    this.renderPause();
+    this.pauseEl.style.display = '';
+    this.hintEl.style.visibility = 'hidden';
+    this.pauseBtn.style.visibility = 'hidden';
   }
 
   private resume(): void {
     this.paused = false;
-    this.pauseLayer.setVisible(false);
-    this.hintText.setVisible(true);
+    this.pauseEl.style.display = 'none';
+    this.hintEl.style.visibility = '';
+    this.pauseBtn.style.visibility = '';
     this.loop.resync(); // don't let the clock "catch up" on time spent paused
   }
 
-  private movePause(d: number): void {
-    this.pauseIndex = (this.pauseIndex + d + PAUSE_OPTIONS.length) % PAUSE_OPTIONS.length;
-    this.refreshPause();
-    pop(this, this.pauseItems[this.pauseIndex]!, 1.1);
+  /** One selection state for keyboard and hover. */
+  private setPause(i: number, fromKeyboard: boolean): void {
+    const next = (i + PAUSE_OPTIONS.length) % PAUSE_OPTIONS.length;
+    if (next === this.pauseIndex && !fromKeyboard) return;
+    this.pauseIndex = next;
+    this.renderPause();
+    if (fromKeyboard) replay(this.pauseItems[next]!, 'pop');
   }
 
-  private refreshPause(): void {
-    this.pauseItems.forEach((t, i) => setColor(t, i === this.pauseIndex ? theme.text : theme.textDim));
-    const t = this.pauseItems[this.pauseIndex]!;
-    this.pauseMarker.clear();
-    drawShape(this.pauseMarker, 'circle', t.x - t.width / 2 - space.md, t.y, 6, theme.soul);
+  private renderPause(): void {
+    this.pauseItems.forEach((t, i) => t.classList.toggle('sel', i === this.pauseIndex));
   }
 
-  private choosePause(): void {
-    const choice = PAUSE_OPTIONS[this.pauseIndex];
+  private choosePause(i: number): void {
+    const choice = PAUSE_OPTIONS[i];
     if (choice === 'Resume') this.resume();
     else if (choice === 'Restart') go(this, 'Battle', { roster: { ...this.roster } });
     else go(this, 'Roster', { roster: { ...this.roster } });
   }
 
-  private updateTimer(): void {
+  private updateHud(): void {
     const text = this.director.mode.hud(this.director.state);
-    this.timerText.setText(text);
+    if (text !== this.shownTimer) {
+      this.timerEl.textContent = text;
+      this.shownTimer = text;
+    }
     const sec = Math.ceil((this.director.mode as TimerMode).remaining(this.director.time));
     if (sec !== this.lastShownSecond) {
-      if (this.lastShownSecond !== -1 && sec <= 10) pop(this, this.timerText, 1.18);
+      if (this.lastShownSecond !== -1 && sec <= 10) replay(this.timerEl, 'pop');
       this.lastShownSecond = sec;
+    }
+    const soul = this.world.soul;
+    const hp = `${Math.ceil(Math.max(0, soul.hp))}${soul.kr > 0 ? '  kr' : ''}`;
+    if (hp !== this.shownHp) {
+      this.hpEl.textContent = hp;
+      this.hpEl.style.color = toCss(soul.kr > 0 ? theme.kr : theme.textDim);
+      this.shownHp = hp;
     }
   }
 
   update(): void {
     if (!this.paused) this.loop.frame((input, dt) => this.director.step(input, dt));
     this.view.draw(this.paused ? 0 : this.loop.realDt);
-    this.updateTimer();
+    this.updateHud();
 
     const outcome = this.director.outcome;
     if (outcome && !this.ending) {

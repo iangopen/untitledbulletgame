@@ -3,7 +3,7 @@ import type { World } from '../core/World';
 import type { Vec2, Wall } from '../core/Box';
 import { Bullet, bulletCircle, bulletRect, bulletTriangle, rectCorners } from '../combat/Bullet';
 import type { Circle, Rect, Triangle } from '../combat/Collision';
-import { fonts, line, rgb, theme, toCss, type } from './theme';
+import { line, rgb, theme } from './theme';
 import { renderScale } from './display';
 import { px } from '../tuning';
 import {
@@ -35,8 +35,6 @@ export class BattleView {
   private readonly overlayGfx: Phaser.GameObjects.Graphics;
   private readonly hudGfx: Phaser.GameObjects.Graphics;
   private readonly maskGfx: Phaser.GameObjects.Graphics;
-  private readonly hpLabel: Phaser.GameObjects.Text;
-  private readonly hpValue: Phaser.GameObjects.Text;
   /** Visual-only despawn fades. Plain Bullet objects reused as snapshots; never in the pool, never collide. */
   private readonly ghosts: { b: Bullet; t: number; live: boolean }[] = Array.from({ length: GHOSTS }, () => ({
     b: new Bullet(),
@@ -67,9 +65,6 @@ export class BattleView {
     this.hudGfx = scene.add.graphics();
     this.maskGfx = scene.make.graphics({}, false);
     this.bulletGfx.setMask(this.maskGfx.createGeometryMask());
-    const font = { fontFamily: fonts.mono, fontSize: `${type.small}px`, color: toCss(theme.textDim) };
-    this.hpLabel = scene.add.text(0, 0, 'hp', { ...font, fontFamily: fonts.sans }).setOrigin(1, 0.5).setResolution(renderScale());
-    this.hpValue = scene.add.text(0, 0, '', font).setOrigin(0, 0.5).setResolution(renderScale());
     world.pool.onDespawn = (b) => this.addGhost(b);
   }
 
@@ -239,14 +234,17 @@ export class BattleView {
     og.strokeCircle(sw.x, sw.y, soul.hitRadius);
   }
 
+  /** HP bar rect in the 1280x720 layout, anchored to the default box (the HTML HUD aligns its text to it). */
+  get hpBar(): { x: number; y: number; w: number; h: number } {
+    const d = this.world.box.defaults;
+    const w = px(160);
+    return { x: Math.round(d.x - w / 2), y: Math.round(d.y + d.height / 2 + px(24)), w, h: 6 };
+  }
+
+  /** Thin HP bar (canvas). Its text lives in the HTML layer. */
   private drawHud(): void {
-    const { box, soul } = this.world;
-    // Thin bar, anchored to the default box so it stays put while the box moves.
-    const barW = px(160);
-    const barH = 6;
-    const d = box.defaults;
-    const bx = Math.round(d.x - barW / 2);
-    const by = Math.round(d.y + d.height / 2 + px(24));
+    const { soul } = this.world;
+    const { x: bx, y: by, w: barW, h: barH } = this.hpBar;
     const hp = Math.max(0, soul.hp);
     const k = barW / soul.maxHp;
     const g = this.hudGfx;
@@ -259,9 +257,5 @@ export class BattleView {
       g.fillStyle(theme.kr, 1);
       g.fillRect(bx + (hp - soul.kr) * k, by, soul.kr * k, barH);
     }
-    this.hpLabel.setPosition(bx - 16, by + barH / 2);
-    this.hpValue.setPosition(bx + barW + 16, by + barH / 2);
-    this.hpValue.setText(`${Math.ceil(hp)}${soul.kr > 0 ? '  kr' : ''}`);
-    this.hpValue.setColor(toCss(soul.kr > 0 ? theme.kr : theme.textDim));
   }
 }
