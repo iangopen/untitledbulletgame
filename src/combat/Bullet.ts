@@ -161,6 +161,14 @@ export function bulletTriangle(b: Bullet, out: Triangle): Triangle {
   return out;
 }
 
+/** Farthest point of a bullet's full-size shape from its center (for off-screen spawns). */
+export function bulletExtent(spec: Pick<BulletSpec, 'shape' | 'a' | 'b'>): number {
+  const b = spec.b ?? spec.a;
+  if (spec.shape === 'beam') return Math.hypot(spec.a / 2, b / 2);
+  if (spec.shape === 'rect') return Math.hypot(spec.a, b);
+  return spec.a;
+}
+
 const CORNER_SX = [-1, 1, 1, -1];
 const CORNER_SY = [-1, -1, 1, 1];
 

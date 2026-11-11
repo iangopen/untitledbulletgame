@@ -6,6 +6,11 @@ import type { DamageType } from './Soul';
  * they never import each other. Add new events here.
  */
 export interface GameEvents {
+  /**
+   * A character's attack started: its first projectile spawned (or, for attacks with no
+   * projectiles, the attack ran). Emitted by the Character base for every character.
+   */
+  attackStarted: { owner: string; attack: string };
   /** A character fired a beam (gen 0 = original, 1 = split/refracted child). */
   beamFired: { owner: string; x: number; y: number; angle: number; gen: number };
   /** A beam's center crossed a box wall from inside. `split` says whether it split there. */

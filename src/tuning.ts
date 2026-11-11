@@ -41,8 +41,21 @@ export const WALL_DAMAGE = 5;
 
 /** Bullet pool capacity. Spawns past this fail with a dev warning. */
 export const BULLET_CAPACITY = 1024;
-/** Bullets despawn once their center is this far outside the box, in px (was 48). */
+/**
+ * Bullets despawn once their center is this far outside the box AND they are moving away from it
+ * (or standing still). Inbound bullets are never culled, so attacks can start off screen.
+ */
 export const DESPAWN_MARGIN = px(48);
+/** Safety cull: any bullet this far from the box center goes, whatever its direction. */
+export const FAR_CULL_DISTANCE = 2400;
+/**
+ * The visible play area in world coordinates (the 1280x720 layout; same as VIEW in render/theme).
+ * Edge attacks spawn beyond it and travel in.
+ */
+export const SCREEN_WIDTH = 1280;
+export const SCREEN_HEIGHT = 720;
+/** Extra distance past the screen edge (beyond the bullet's own size) for off-screen spawns. */
+export const OFFSCREEN_PAD = px(4);
 /** Spawn scale-pop duration (s). Draw AND hitbox scale together during it. */
 export const SPAWN_POP_TIME = 0.08;
 /** Despawn fade duration (s). Visual-only ghost; no collision. */

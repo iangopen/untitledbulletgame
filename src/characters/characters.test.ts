@@ -5,6 +5,8 @@ import { Prism, REFRACTED } from './prism/Prism';
 import { registry } from './registry';
 import { World } from '../core/World';
 import { EventBus, type GameEvents } from '../core/EventBus';
+import { SCREEN_HEIGHT, SCREEN_WIDTH } from '../tuning';
+import type { Bullet } from '../combat/Bullet';
 import { STEP } from '../core/Clock';
 
 type T = 'shot' | 'wave';
@@ -124,16 +126,81 @@ describe('Prism behaviour', () => {
     expect(w.pool.activeCount).toBe(0);
     expect(w.props.length).toBe(0);
   });
-  it('level 1 fires triangle volleys from one edge with a gap', () => {
-    const w = new World(0, 0);
+  it('volleys: constant spacing at levels 1, 10 and 20, one safe gap, all white, starting off screen', () => {
+    for (const level of [1, 10, 20]) {
+      const w = new World(640, 369);
+      const p = new Prism(w);
+      p.setLevel(level);
+      let row: Bullet[] = [];
+      for (let i = 0; i < 60 * 12 && row.length === 0; i++) {
+        p.tick(STEP);
+        row = w.pool.all.filter((b) => b.active && b.shape === 'triangle' && b.age === 0);
+      }
+      // Rows can spawn in the same step (battle-start shift); keep the one moving like the first.
+      row = row.filter((b) => Math.sign(b.vx) === Math.sign(row[0]!.vx) && Math.sign(b.vy) === Math.sign(row[0]!.vy));
+      const r = resolveLevel(prismConfig, level).attacks.volley!;
+      const horizontal = row[0]!.vx === 0; // moving vertically = came from top/bottom
+      const along = row.map((b) => (horizontal ? b.x : b.y)).sort((a, b) => a - b);
+      const slots = Math.floor((horizontal ? w.box.width : w.box.height) / prismConfig.rules.volleySpacing);
+      expect(row.length).toBe(slots - r.gapSize!);
+      const gaps = along.slice(1).map((v, i) => +(v - along[i]!).toFixed(6));
+      const sp = prismConfig.rules.volleySpacing;
+      // Neighbours are exactly one spacing apart, except the one safe gap of gapSize missing slots.
+      expect(gaps.filter((g) => g !== sp)).toEqual(gaps.some((g) => g !== sp) ? [+(sp * (r.gapSize! + 1)).toFixed(6)] : []);
+      // eslint-disable-next-line no-console
+      console.log(`L${level}: ${row.length} triangles from ${horizontal ? 'top/bottom' : 'a side'}, spacing ${[...new Set(gaps)].join(' / ')} px (gap ${r.gapSize} slots)`);
+      for (const b of row) {
+        expect(b.kind).toBe('white');
+        const wp = w.box.toWorld(b);
+        const off = wp.x < 0 || wp.x > SCREEN_WIDTH || wp.y < 0 || wp.y > SCREEN_HEIGHT;
+        expect(off).toBe(true);
+      }
+    }
+  });
+  it('volleys reach the box on the cooldown beat (off-screen lead is planned ahead)', () => {
+    const w = new World(640, 369);
     const p = new Prism(w);
-    p.setLevel(1);
-    run(w, p, 0.81);
-    const bs = w.pool.all.filter((b) => b.active);
-    const r = resolveLevel(prismConfig, 1).attacks.volley!;
-    expect(bs.length).toBe(r.count! - r.gapSize!);
-    expect(new Set(bs.map((b) => b.shape))).toEqual(new Set(['triangle']));
-    expect(new Set(bs.map((b) => `${Math.sign(b.vx)},${Math.sign(b.vy)}`)).size).toBe(1);
+    p.setLevel(5);
+    const cd = resolveLevel(prismConfig, 5).attacks.volley!.cooldown!;
+    // Group triangles by the step they spawned in (one row each); a row arrives when its first
+    // triangle's center enters the box.
+    const spawnStep = new Map<Bullet, number>();
+    const rowArrival = new Map<number, number>();
+    for (let i = 0; i < 60 * 30; i++) {
+      p.tick(STEP);
+      for (const b of w.pool.all) if (b.active && b.shape === 'triangle' && !spawnStep.has(b)) spawnStep.set(b, i);
+      w.step(still, STEP);
+      w.soul.iframes = 1;
+      for (const [b, st] of spawnStep) {
+        if (!b.active || rowArrival.has(st)) continue;
+        if (Math.abs(b.x) <= w.box.halfWidth && Math.abs(b.y) <= w.box.halfHeight) rowArrival.set(st, w.time);
+      }
+      for (const b of [...spawnStep.keys()]) if (!b.active) spawnStep.delete(b);
+    }
+    const arrivals = [...rowArrival.values()].sort((a, b) => a - b);
+    const spacing = arrivals.slice(1).map((t, i) => t - arrivals[i]!);
+    // eslint-disable-next-line no-console
+    console.log(`L5 arrivals (s): ${arrivals.map((t) => t.toFixed(2)).join(' ')}`);
+    expect(arrivals.length).toBeGreaterThan(10);
+    for (const d of spacing.slice(1)) expect(Math.abs(d - cd)).toBeLessThan(STEP * 2 + 1e-9);
+  });
+  it('entering the box never fires a wall hook; leaving it does', () => {
+    const w = new World(640, 369);
+    const walls: string[] = [];
+    w.pool.spawn({ shape: 'circle', x: -w.box.halfWidth - 300, y: 0, vx: 300, a: 9, damage: 1, onWall: (_b, wall) => (walls.push(wall), 'pass') });
+    for (let i = 0; i < 60 * 3; i++) w.pool.update(STEP, w.box);
+    expect(walls).toEqual(['right']);
+  });
+  it('attackStarted fires when the first projectile of an attack spawns', () => {
+    const w = new World(640, 369);
+    const p = new Prism(w);
+    p.setLevel(10);
+    const events: { attack: string; spawnedNow: number }[] = [];
+    w.bus.on('attackStarted', (e) => events.push({ attack: e.attack, spawnedNow: w.pool.all.filter((b) => b.active && b.age === 0 && b.owner === 'prism').length }));
+    run(w, p, 15);
+    expect(events.some((e) => e.attack === 'volley')).toBe(true);
+    expect(events.some((e) => e.attack === 'beam')).toBe(true);
+    expect(events.every((e) => e.spawnedNow > 0)).toBe(true);
   });
   it('beams split once at a wall; children never split again', () => {
     const w = new World(0, 0);

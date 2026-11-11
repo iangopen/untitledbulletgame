@@ -5,6 +5,17 @@ import { resolveLevel, type CharacterConfig, type ResolvedAttack, type ResolvedL
 /** Delay before an attack's first shot after it becomes active (s), staggered per attack. */
 const FIRST_SHOT_DELAY = 0.8;
 const FIRST_SHOT_STAGGER = 0.6;
+/** Guard against a zero cooldown planning forever in one step. */
+const MAX_PLANS_PER_STEP = 16;
+
+/**
+ * One projectile (or row) of a planned attack. `lead` = seconds it needs from spawning off screen
+ * until it reaches the box; `fire` spawns it (using the box as it is then).
+ */
+export interface Shot {
+  lead: number;
+  fire: () => void;
+}
 
 /** What the runner/Director needs from any character, independent of its attack/rule types. */
 export interface CharacterHandle {
@@ -17,23 +28,40 @@ export interface CharacterHandle {
   dispose(): void;
 }
 
+interface Pending {
+  at: number;
+  fire: () => void;
+  plan: { attack: string; started: boolean };
+}
+
 /**
  * Base for all characters. Owns level, resolved config and the attack schedule,
  * driven by the fixed step. Subclasses supply one method per attack.
  * Characters never import each other; they talk through world.bus only.
+ *
+ * Arrival timing: each attack's timer counts down to when it should REACH the box (the beat set
+ * by its cooldown). An attack either acts immediately (returns nothing) or returns Shots, each with
+ * the lead time it needs to travel in from off screen; the base plans the attack `planAhead()`
+ * seconds early and spawns every shot at (arrival - lead), so off-screen spawns keep the old beat.
+ * If a plan's lead is longer than the time left (battle start), the arrival and the rest of that
+ * attack's schedule shift later rather than bunching up. The base emits `attackStarted` when an
+ * attack's first projectile spawns, so every character drives its profile box for free.
  */
 export abstract class Character<A extends string = string, R = Record<string, number | boolean>> implements CharacterHandle {
   abstract readonly id: string;
   abstract readonly color: number;
   abstract readonly config: CharacterConfig<A, R>;
-  /** One method per attack id, called when its cooldown elapses. */
-  protected abstract readonly attacks: Record<A, (p: ResolvedAttack) => void>;
+  /** One method per attack id. Return Shots to have them timed to arrive on the beat. */
+  protected abstract readonly attacks: Record<A, (p: ResolvedAttack) => Shot[] | void>;
 
   level = 0;
   resolved: ResolvedLevel<A> = { level: 0, band: -1, attacks: {} };
-  /** Seconds until each enabled attack fires next. */
+  /** Seconds until each enabled attack should next arrive. */
   readonly timers: Partial<Record<A, number>> = {};
   protected readonly rng: () => number;
+  /** Game seconds this character has ticked (its own clock for planned spawns). */
+  private clock = 0;
+  private pending: Pending[] = [];
 
   constructor(
     protected readonly world: World,
@@ -59,19 +87,60 @@ export abstract class Character<A extends string = string, R = Record<string, nu
     this.onLevelChanged(prev);
   }
 
+  /**
+   * Upper bound on the lead any shot of this attack can need (s): how early to plan it.
+   * 0 (default) = the attack runs exactly on its beat.
+   */
+  protected planAhead(_id: A, _p: ResolvedAttack): number {
+    return 0;
+  }
+
   /** Called every fixed step before the world steps. */
   tick(dt: number): void {
     if (!this.active) return;
+    this.clock += dt;
     this.update(dt);
+    this.firePending();
     for (const id of Object.keys(this.resolved.attacks) as A[]) {
       const p = this.resolved.attacks[id]!;
       let t = (this.timers[id] ?? 0) - dt;
-      if (t <= 0) {
-        this.attacks[id](p);
+      const ahead = Math.max(0, this.planAhead(id, p));
+      for (let n = 0; t - ahead <= 0 && n < MAX_PLANS_PER_STEP; n++) {
+        const shots = this.attacks[id](p);
+        const plan = { attack: id, started: false };
+        if (!shots || shots.length === 0) {
+          this.started(plan);
+        } else {
+          // Arrive on the beat, or as soon as the slowest shot can if the beat is too close.
+          // (Only shift when a shot truly needs longer, so the sub-step remainder of t is kept.)
+          const need = Math.max(...shots.map((s) => s.lead));
+          const arrive = need > 0 && need > t ? need : t;
+          for (const s of shots) this.pending.push({ at: this.clock + arrive - s.lead, fire: s.fire, plan });
+          t = arrive;
+        }
         t += p.cooldown ?? 1;
       }
       this.timers[id] = t;
     }
+    this.firePending();
+  }
+
+  /** Spawn every planned shot whose time has come (in time order). */
+  private firePending(): void {
+    if (this.pending.length === 0) return;
+    const due = this.pending.filter((s) => s.at <= this.clock + 1e-9).sort((a, b) => a.at - b.at);
+    if (due.length === 0) return;
+    this.pending = this.pending.filter((s) => s.at > this.clock + 1e-9);
+    for (const s of due) {
+      s.fire();
+      this.started(s.plan);
+    }
+  }
+
+  private started(plan: { attack: string; started: boolean }): void {
+    if (plan.started) return;
+    plan.started = true;
+    this.world.bus.emit('attackStarted', { owner: this.id, attack: plan.attack });
   }
 
   /** Per-step behavior beyond scheduled attacks (props, steering). */

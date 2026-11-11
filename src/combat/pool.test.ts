@@ -59,6 +59,14 @@ describe('BulletPool', () => {
     p.update(1 / 60, box);
     expect(b.active).toBe(false);
   });
+  it('never culls a bullet heading toward the box, however far out (off-screen spawns)', () => {
+    const p = new BulletPool(2);
+    const inbound = p.spawn({ shape: 'circle', x: -1000, y: 0, vx: 50, a: 5, damage: 1 })!;
+    const outbound = p.spawn({ shape: 'circle', x: -1000, y: 0, vx: -50, a: 5, damage: 1 })!;
+    p.update(1 / 60, box);
+    expect(inbound.active).toBe(true);
+    expect(outbound.active).toBe(false);
+  });
   it('wall hook fires once on inside -> outside, with the right wall; die/bounce/pass', () => {
     const p = new BulletPool(8);
     const walls: string[] = [];

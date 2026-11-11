@@ -1,5 +1,5 @@
 import type { Box } from '../core/Box';
-import { BULLET_CAPACITY, DESPAWN_MARGIN } from '../tuning';
+import { BULLET_CAPACITY, DESPAWN_MARGIN, FAR_CULL_DISTANCE } from '../tuning';
 import { Bullet, type BulletContext, type BulletSpec, type Wall } from './Bullet';
 
 export type DespawnReason = 'lifetime' | 'offbox' | 'wall' | 'cleared';
@@ -107,7 +107,11 @@ export class BulletPool implements BulletContext {
           continue;
         }
       }
-      if (Math.abs(b.x) > hw + DESPAWN_MARGIN || Math.abs(b.y) > hh + DESPAWN_MARGIN) {
+      // Off-box cull only once a bullet is outside the margin AND not heading toward the box, so
+      // attacks spawned off screen travel in untouched. Entering the box never fires wall hooks
+      // (only inside -> outside above does).
+      const outside = Math.abs(b.x) > hw + DESPAWN_MARGIN || Math.abs(b.y) > hh + DESPAWN_MARGIN;
+      if ((outside && b.x * b.vx + b.y * b.vy >= 0) || b.x * b.x + b.y * b.y > FAR_CULL_DISTANCE * FAR_CULL_DISTANCE) {
         this.release(b, 'offbox');
       }
     }

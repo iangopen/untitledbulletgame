@@ -1,8 +1,10 @@
-import { Character } from '../Character';
+import { Character, type Shot } from '../Character';
 import type { ResolvedAttack } from '../config';
 import type { Bullet, BulletContext, Wall, WallResponse } from '../../combat/Bullet';
 import { pointInTriangle, type Triangle } from '../../combat/Collision';
-import { line } from '../../combat/patterns';
+import { line, lineOffset } from '../../combat/patterns';
+import { bulletExtent } from '../../combat/Bullet';
+import { maxOffscreenDistance, offscreenStart } from '../../combat/offscreen';
 import type { Prop } from '../../core/World';
 import { theme } from '../../render/theme';
 import { px } from '../../tuning';
@@ -20,10 +22,17 @@ export class Prism extends Character<PrismAttack, PrismRules> {
   readonly color = theme.prism;
   readonly config = prismConfig;
   protected readonly attacks = {
-    volley: (p: ResolvedAttack) => this.fireVolley(p),
-    beam: (p: ResolvedAttack) => this.fireBeams(p),
+    volley: (p: ResolvedAttack) => this.planVolley(p),
+    beam: (p: ResolvedAttack) => this.planBeams(p),
     prism: (p: ResolvedAttack) => this.placePrism(p),
   };
+
+  /** Volleys and beams start off screen; plan them early enough to still arrive on the beat. */
+  protected override planAhead(id: PrismAttack, p: ResolvedAttack): number {
+    if (id === 'prism' || !p.speed) return 0;
+    const extent = id === 'volley' ? this.rules.volleySize : bulletExtent({ shape: 'beam', a: p.length!, b: this.rules.beamThickness });
+    return maxOffscreenDistance(this.world.box, extent) / p.speed;
+  }
 
   /** The refraction prism while level >= 15, else null. */
   prop: Prop | null = null;
@@ -43,38 +52,55 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     return e;
   }
 
-  // --- Levels 1+: triangle volleys from one edge, with a clear gap ---------
-  private fireVolley(p: ResolvedAttack): void {
-    const count = p.count!;
-    const gap = p.gapSize!;
-    const start = Math.floor(this.rng() * (count - gap + 1));
-    const gaps = Array.from({ length: gap }, (_, i) => start + i);
-    line(this.world.pool, this.world.box, {
-      edge: this.pickEdge(),
-      count,
-      speed: p.speed!,
-      gaps,
-      style: {
-        shape: 'triangle', a: this.rules.volleySize, faceVelocity: true,
-        damage: p.damage!, owner: this.id, kind: 'white',
+  // --- Levels 1+: triangle volleys from one edge, constant spacing, one safe gap --
+  private planVolley(p: ResolvedAttack): Shot[] {
+    const edge = this.pickEdge();
+    const gapAt = this.rng();
+    const style = {
+      shape: 'triangle' as const, a: this.rules.volleySize, faceVelocity: true, noPop: true,
+      damage: p.damage!, owner: this.id, kind: 'white' as const,
+    };
+    const { box, pool } = this.world;
+    // The row starts just off screen; it reaches the box edge after offset / speed seconds.
+    const lead = lineOffset(box, { edge, style }) / p.speed!;
+    return [{
+      lead,
+      fire: () => {
+        line(pool, box, { edge, spacing: this.rules.volleySpacing, speed: p.speed!, gapSize: p.gapSize!, gapAt, style });
       },
-    });
+    }];
   }
 
   // --- Levels 6+: beams that split in two at a wall --------------------------
-  private fireBeams(p: ResolvedAttack): void {
+  /**
+   * Each beam crosses a random point on a random box edge (up to +-20 degrees off the inward normal,
+   * or aimed through the prism), starting off screen on that line.
+   */
+  private planBeams(p: ResolvedAttack): Shot[] {
     const { box } = this.world;
     const prismP = this.resolved.attacks.prism;
+    const extent = bulletExtent({ shape: 'beam', a: p.length!, b: this.rules.beamThickness });
+    const shots: Shot[] = [];
     for (let i = 0; i < p.count!; i++) {
       const edge = EDGES[Math.floor(this.rng() * 4)]!;
       const [nx, ny] = INWARD[edge];
       const u = this.rng() * 1.6 - 0.8; // position along the edge, -0.8..0.8 of half length
-      const x = nx !== 0 ? -nx * (box.halfWidth + px(10)) : u * box.halfWidth;
-      const y = ny !== 0 ? -ny * (box.halfHeight + px(10)) : u * box.halfHeight;
+      const ex = nx !== 0 ? -nx * box.halfWidth : u * box.halfWidth;
+      const ey = ny !== 0 ? -ny * box.halfHeight : u * box.halfHeight;
       let angle = Math.atan2(ny, nx) + (this.rng() - 0.5) * 0.7;
-      if (this.prop && prismP && this.rng() < prismP.aimChance!) angle = Math.atan2(this.prop.y - y, this.prop.x - x);
-      this.spawnBeam(x, y, angle, p.speed!, p, 0, 0, false);
+      const aimed = !!(this.prop && prismP && this.rng() < prismP.aimChance!);
+      if (aimed) angle = Math.atan2(this.prop!.y - ey, this.prop!.x - ex);
+      const start = offscreenStart(box, ex, ey, angle, extent);
+      shots.push({
+        lead: start.distance / p.speed!,
+        fire: () => {
+          // Aimed beams re-aim at the prism as it is now (it may have moved since planning).
+          const a = aimed && this.prop ? Math.atan2(this.prop.y - start.y, this.prop.x - start.x) : angle;
+          this.spawnBeam(start.x, start.y, a, p.speed!, p, 0, 0, true);
+        },
+      });
     }
+    return shots;
   }
 
   private spawnBeam(x: number, y: number, angle: number, speed: number, p: ResolvedAttack, gen: number, flags: number, child: boolean): void {
