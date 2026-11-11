@@ -3,6 +3,7 @@ import { World } from '../core/World';
 import { BattleView } from '../render/BattleView';
 import { VIEW, fonts, theme, toCss, type } from '../render/theme';
 import { applyView, renderScale } from '../render/display';
+import { ui } from '../ui/UiLayer';
 import { px } from '../tuning';
 import { FixedLoop } from './FixedLoop';
 import { aimed, fan, line, ring } from '../combat/patterns';
@@ -42,6 +43,7 @@ export class DebugScene extends Phaser.Scene {
 
   create(): void {
     applyView(this);
+    ui.clear(); // dev scene uses Phaser text; no HTML screen
     const { width, height } = VIEW;
     this.world = new World(VIEW.cx, VIEW.cy + px(6));
     this.view = new BattleView(this, this.world);
@@ -61,13 +63,13 @@ export class DebugScene extends Phaser.Scene {
     const kb = this.input.keyboard!;
     const fire: Record<string, () => void> = {
       ONE: () => this.fireLine(),
-      TWO: () => fan(this.world.pool, { x: 0, y: -this.world.box.halfHeight, angle: Math.PI / 2, count: 9, spread: 1.6, speed: 120 }),
-      THREE: () => ring(this.world.pool, { x: 0, y: 0, count: 24, speed: 90, radius: 30, style: { a: 5 } }),
-      FOUR: () => aimed(this.world.pool, { x: this.world.box.halfWidth, y: -this.world.box.halfHeight, target: this.world.soul.pos, speed: 180, count: 3, spread: 0.3 }),
-      FIVE: () => ring(this.world.pool, { x: 0, y: 0, count: 10, speed: 60, radius: 20, style: { shape: 'rect', a: 10, b: 4, spin: 3 } }),
+      TWO: () => fan(this.world.pool, { x: 0, y: -this.world.box.halfHeight, angle: Math.PI / 2, count: 9, spread: 1.6, speed: px(120) }),
+      THREE: () => ring(this.world.pool, { x: 0, y: 0, count: 24, speed: px(90), radius: px(30), style: { a: px(5) } }),
+      FOUR: () => aimed(this.world.pool, { x: this.world.box.halfWidth, y: -this.world.box.halfHeight, target: this.world.soul.pos, speed: px(180), count: 3, spread: 0.3 }),
+      FIVE: () => ring(this.world.pool, { x: 0, y: 0, count: 10, speed: px(60), radius: px(20), style: { shape: 'rect', a: px(10), b: px(4), spin: 3 } }),
       SIX: () => this.fireSplitBeams(),
-      SEVEN: () => ring(this.world.pool, { x: 0, y: 0, count: 12, speed: 70, radius: 25, style: { a: 6, type: 'kr', damage: 15 } }),
-      EIGHT: () => ring(this.world.pool, { x: 0, y: 0, count: 8, speed: 110, radius: 20, style: { shape: 'triangle', a: 8, spin: 2, lifetime: 6, onWall: () => 'bounce' } }),
+      SEVEN: () => ring(this.world.pool, { x: 0, y: 0, count: 12, speed: px(70), radius: px(25), style: { a: px(6), type: 'kr', damage: 15 } }),
+      EIGHT: () => ring(this.world.pool, { x: 0, y: 0, count: 8, speed: px(110), radius: px(20), style: { shape: 'triangle', a: px(8), spin: 2, lifetime: 6, onWall: () => 'bounce' } }),
       ZERO: () => this.stress(),
     };
     for (const [key, fn] of Object.entries(fire)) kb.on(`keydown-${key}`, fn);
@@ -84,16 +86,16 @@ export class DebugScene extends Phaser.Scene {
       F: () => {
         this.small = !this.small;
         const d = box.defaults;
-        box.resizeTo(this.small ? 180 : d.width, this.small ? 120 : d.height, 0.6);
+        box.resizeTo(this.small ? px(180) : d.width, this.small ? px(120) : d.height, 0.6);
       },
       G: () => {
         const d = box.defaults;
         const offs = [[60, -30], [-60, 30], [0, 0]] as const;
         const [ox, oy] = offs[this.moveIdx++ % offs.length]!;
-        box.moveTo(d.x + ox, d.y + oy, 0.6);
+        box.moveTo(d.x + px(ox), d.y + px(oy), 0.6);
       },
-      V: () => box.squeezeWall('left', 80, 0.12),
-      B: () => box.squeezeWall('right', 80, 1.5),
+      V: () => box.squeezeWall('left', px(80), 0.12),
+      B: () => box.squeezeWall('right', px(80), 1.5),
       N: () => this.cycleWalls(),
       M: () => (this.chaos = !this.chaos),
       P: () => this.prism.setLevel(this.prism.level === 20 ? 0 : 20),
@@ -140,7 +142,7 @@ export class DebugScene extends Phaser.Scene {
   private fireLine(): void {
     const edges: Wall[] = ['left', 'top', 'right', 'bottom'];
     const edge = edges[this.edgeIdx++ % 4]!;
-    line(this.world.pool, this.world.box, { edge, count: 10, speed: 110, gaps: [4, 5] });
+    line(this.world.pool, this.world.box, { edge, count: 10, speed: px(110), gaps: [4, 5] });
   }
 
   /** Demonstrates the wall hook: beams split into two at the wall they hit (Prism-style). */
@@ -148,17 +150,17 @@ export class DebugScene extends Phaser.Scene {
     const w = this.world;
     for (const angle of [-0.6, 0, 0.6]) {
       w.pool.spawn({
-        shape: 'beam', x: 0, y: 0, vx: Math.cos(angle) * 160, vy: Math.sin(angle) * 160,
-        faceVelocity: true, a: 26, b: 4, damage: 6,
+        shape: 'beam', x: 0, y: 0, vx: Math.cos(angle) * px(160), vy: Math.sin(angle) * px(160),
+        faceVelocity: true, a: px(26), b: px(4), damage: 6,
         onWall: (b, wall, ctx) => {
           if (b.owner === 'child') return 'die';
           const vertical = wall === 'left' || wall === 'right';
           for (const s of [-1, 1]) {
-            const vx = vertical ? -b.vx * 0.8 : b.vx * 0.8 + s * 60;
-            const vy = vertical ? b.vy * 0.8 + s * 60 : -b.vy * 0.8;
+            const vx = vertical ? -b.vx * 0.8 : b.vx * 0.8 + s * px(60);
+            const vy = vertical ? b.vy * 0.8 + s * px(60) : -b.vy * 0.8;
             ctx.spawn({
               shape: 'beam', x: b.x, y: b.y, vx, vy, faceVelocity: true,
-              a: 18, b: 3, damage: 5, owner: 'child', noPop: true,
+              a: px(18), b: px(3), damage: 5, owner: 'child', noPop: true,
               onWall: () => 'die',
             });
           }
@@ -174,9 +176,9 @@ export class DebugScene extends Phaser.Scene {
       const a = (i / 300) * Math.PI * 2 * 7;
       const shape = (['circle', 'rect', 'triangle', 'beam'] as const)[i % 4]!;
       w.pool.spawn({
-        shape, x: Math.cos(a) * 20, y: Math.sin(a) * 20,
-        vx: Math.cos(a) * (20 + (i % 13) * 4), vy: Math.sin(a) * (20 + (i % 13) * 4),
-        a: shape === 'beam' ? 16 : 4, b: 2, spin: 1.5, damage: 1,
+        shape, x: Math.cos(a) * px(20), y: Math.sin(a) * px(20),
+        vx: Math.cos(a) * px(20 + (i % 13) * 4), vy: Math.sin(a) * px(20 + (i % 13) * 4),
+        a: shape === 'beam' ? px(16) : px(4), b: px(2), spin: 1.5, damage: 1,
       });
     }
   }
