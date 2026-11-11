@@ -6,11 +6,17 @@ import { FixedLoop } from './FixedLoop';
 import { aimed, fan, line, ring } from '../combat/patterns';
 import type { Wall } from '../combat/Bullet';
 import { STEP } from '../core/Clock';
+import { WALLS } from '../core/Box';
+import { WALL_DAMAGE } from '../tuning';
+import { characterById } from '../characters/registry';
+import type { CharacterHandle } from '../characters/Character';
 
 /**
  * DEV ONLY. Fire each pattern on demand and watch counts and step time.
  * 1 line · 2 fan · 3 ring · 4 aimed · 5 spinning rects · 6 splitting beams (wall hook)
  * 7 KR ring · 8 bouncing triangles · 0 stress (+300) · C clear · I invincible · H hitboxes · ` back
+ * Box: Q/E rotate -/+30 deg · R +90 · T +180 · F resize small/default · G move · V fast squeeze left
+ *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
  */
 export class DebugScene extends Phaser.Scene {
   private world!: World;
@@ -20,6 +26,13 @@ export class DebugScene extends Phaser.Scene {
   private invincible = false;
   private edgeIdx = 0;
   private stepSamples: number[] = [];
+  private small = false;
+  private moveIdx = 0;
+  private wallMode = 0;
+  private chaos = false;
+  private chaosT = 0;
+  private boxText!: Phaser.GameObjects.Text;
+  private prism!: CharacterHandle;
 
   constructor() {
     super('Debug');
@@ -30,12 +43,15 @@ export class DebugScene extends Phaser.Scene {
     this.world = new World(width / 2, height / 2 - 20);
     this.view = new BattleView(this, this.world);
     this.view.showHitboxes = true;
+    this.prism = characterById('prism')!.create(this.world);
+    this.events.once('shutdown', () => this.prism.dispose());
     this.loop = new FixedLoop(this);
     this.stepSamples = [];
     const mono = { fontFamily: 'monospace', fontSize: '12px', color: toCss(theme.textDim) };
     this.readout = this.add.text(8, 6, '', { ...mono, color: toCss(theme.text) });
+    this.boxText = this.add.text(8, 56, '', { ...mono, color: toCss(theme.textDim) });
     this.add
-      .text(width / 2, height - 26, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split-beams 7 KR 8 bounce 0 stress\nC clear  I invincible  H hitboxes  ` back', { ...mono, align: 'center' })
+      .text(width / 2, height - 26, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
       .setOrigin(0.5);
 
     const kb = this.input.keyboard!;
@@ -55,11 +71,66 @@ export class DebugScene extends Phaser.Scene {
     kb.on('keydown-I', () => (this.invincible = !this.invincible));
     kb.on('keydown-H', () => (this.view.showHitboxes = !this.view.showHitboxes));
     kb.on('keydown-BACKTICK', () => this.scene.start('Battle'));
+    const box = this.world.box;
+    const box_: Record<string, () => void> = {
+      Q: () => box.rotateBy(-Math.PI / 6, 0.4),
+      E: () => box.rotateBy(Math.PI / 6, 0.4),
+      R: () => box.rotateBy(Math.PI / 2, 0.5),
+      T: () => box.rotateBy(Math.PI, 0.8),
+      F: () => {
+        this.small = !this.small;
+        const d = box.defaults;
+        box.resizeTo(this.small ? 180 : d.width, this.small ? 120 : d.height, 0.6);
+      },
+      G: () => {
+        const d = box.defaults;
+        const offs = [[60, -30], [-60, 30], [0, 0]] as const;
+        const [ox, oy] = offs[this.moveIdx++ % offs.length]!;
+        box.moveTo(d.x + ox, d.y + oy, 0.6);
+      },
+      V: () => box.squeezeWall('left', 80, 0.12),
+      B: () => box.squeezeWall('right', 80, 1.5),
+      N: () => this.cycleWalls(),
+      M: () => (this.chaos = !this.chaos),
+      P: () => this.prism.setLevel(this.prism.level === 20 ? 0 : 20),
+      Z: () => {
+        this.chaos = false;
+        this.small = false;
+        box.reset();
+      },
+    };
+    for (const [key, fn] of Object.entries(box_)) kb.on(`keydown-${key}`, fn);
 
     (window as unknown as Record<string, unknown>).__debug = {
-      world: this.world, view: this.view, loop: this.loop, game: this.game, fire,
+      world: this.world, view: this.view, loop: this.loop, game: this.game, fire, box: box_,
+      setChaos: (v: boolean) => (this.chaos = v),
+      prism: () => this.prism,
       setInvincible: (v: boolean) => (this.invincible = v),
     };
+  }
+
+  /** none -> all walls normal damage -> left/right KR -> none */
+  private cycleWalls(): void {
+    this.wallMode = (this.wallMode + 1) % 3;
+    const b = this.world.box;
+    for (const w of WALLS) {
+      const damaging = this.wallMode === 1 || (this.wallMode === 2 && (w === 'left' || w === 'right'));
+      b.setWall(w, { damaging, damage: this.wallMode === 2 ? 10 : WALL_DAMAGE, type: this.wallMode === 2 ? 'kr' : 'normal' });
+    }
+  }
+
+  /** Continuous motion for testing: rotate and breathe the size on a loop. */
+  private stepChaos(dt: number): void {
+    if (!this.chaos) return;
+    this.chaosT += dt;
+    const b = this.world.box;
+    if (this.chaosT >= 1) {
+      this.chaosT -= 1;
+      b.rotateBy(0.35, 1, 'linear');
+      const d = b.defaults;
+      const k = 0.65 + 0.35 * Math.abs(Math.sin(this.world.time * 0.7));
+      b.resizeTo(d.width * k, d.height * (1.3 - k * 0.3), 1, 'sineInOut');
+    }
   }
 
   private fireLine(): void {
@@ -110,6 +181,8 @@ export class DebugScene extends Phaser.Scene {
     const w = this.world;
     this.loop.frame((input, dt) => {
       if (this.invincible) w.soul.iframes = Math.max(w.soul.iframes, 2 * STEP);
+      this.stepChaos(dt);
+      this.prism.tick(dt);
       w.step(input, dt);
     });
     if (this.loop.lastStepMs > 0) {
@@ -121,7 +194,14 @@ export class DebugScene extends Phaser.Scene {
     this.readout.setText(
       `DEBUG  bullets ${w.pool.activeCount}/${w.pool.capacity}  dropped ${w.pool.dropped}\n` +
         `step avg ${avg.toFixed(3)} ms  max ${this.loop.maxStepMs.toFixed(3)} ms  (budget ${(STEP * 1000).toFixed(1)} ms)\n` +
-        `hp ${Math.ceil(w.soul.hp)}  kr ${w.soul.kr.toFixed(1)}  ${this.invincible ? 'INVINCIBLE' : ''}`,
+        `hp ${Math.ceil(w.soul.hp)}  kr ${w.soul.kr.toFixed(1)}  ${this.invincible ? 'INVINCIBLE' : ''}  prism lv ${this.prism.level} (P)`,
+    );
+    const b = w.box;
+    const walls = WALLS.map((k) => `${k[0]!.toUpperCase()}:${b.walls[k].damaging ? (b.walls[k].type === 'kr' ? 'KR' : 'DMG') : 'safe'}`).join(' ');
+    this.boxText.setText(
+      `box ${b.width.toFixed(0)}x${b.height.toFixed(0)} at (${b.x.toFixed(0)},${b.y.toFixed(0)}) rot ${((b.rotation * 180) / Math.PI).toFixed(1)}°` +
+        `${b.moving ? ' MOVING' : ''}${this.chaos ? ' CHAOS' : ''}
+walls ${walls}`,
     );
   }
 }
