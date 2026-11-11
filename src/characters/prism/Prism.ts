@@ -56,7 +56,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
       gaps,
       style: {
         shape: 'triangle', a: this.rules.volleySize, faceVelocity: true,
-        damage: p.damage!, owner: this.id, color: this.color,
+        damage: p.damage!, owner: this.id, kind: 'white',
       },
     });
   }
@@ -80,7 +80,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
   private spawnBeam(x: number, y: number, angle: number, speed: number, p: ResolvedAttack, gen: number, flags: number, child: boolean): void {
     const b = this.world.pool.spawn({
       shape: 'beam', x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, faceVelocity: true,
-      a: p.length!, b: this.rules.beamThickness, damage: p.damage!, owner: this.id, color: this.color,
+      a: p.length!, b: this.rules.beamThickness, damage: p.damage!, owner: this.id, kind: 'white',
       gen, flags, noPop: child, onWall: this.onBeamWall,
     });
     if (b) this.world.bus.emit('beamFired', { owner: this.id, x, y, angle, gen });

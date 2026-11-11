@@ -45,7 +45,7 @@ export class MenuScene extends Phaser.Scene {
     screen.append(
       at(shape('triangle', theme.prism, 20), cx - 56, 214),
       at(shape('circle', theme.soul, 11), cx, 216),
-      at(shape('square', theme.bulletNormal, 18), cx + 56, 216),
+      at(shape('square', theme.bullet.white, 18), cx + 56, 216),
       at(h('div', 't-title', 'untitled bullet game'), cx, 300),
     );
 

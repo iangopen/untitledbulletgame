@@ -17,8 +17,13 @@ export const theme = {
   hpFill: 0xf5e663,
   hpEmpty: 0x22222c,
   kr: 0xff2bd6,
-  bulletNormal: 0xf4f4f8,
-  bulletKr: 0xff2bd6,
+  /** Projectile colors, one per type (combat/projectile.ts). Never red; fixed for every character. */
+  bullet: {
+    white: 0xf4f4f8,
+    blue: 0x2e8bff,
+    orange: 0xff8a1c,
+    kr: 0xff2bd6,
+  },
   /** Character accent colors (one per character; never red). */
   prism: 0x3de8ff,
   /** Non-damaging props (e.g. refraction prism) draw as translucent fill + outline. */

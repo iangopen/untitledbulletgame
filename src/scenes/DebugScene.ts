@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { PROJECTILE_TYPES } from '../combat/projectile';
 import { World } from '../core/World';
 import { BattleView } from '../render/BattleView';
 import { VIEW, fonts, theme, toCss, type } from '../render/theme';
@@ -16,7 +17,7 @@ import type { CharacterHandle } from '../characters/Character';
 
 /**
  * DEV ONLY. Fire each pattern on demand and watch counts and step time.
- * 1 line · 2 fan · 3 ring · 4 aimed · 5 spinning rects · 6 splitting beams (wall hook)
+ * 1 line · 2 fan · 3 ring · 4 aimed · 5 spinning rects · 6 splitting beams (wall hook) · 9 one bullet of each projectile type
  * 7 KR ring · 8 bouncing triangles · 0 stress (+300) · C clear · I invincible · H hitboxes · ` back
  * Box: Q/E rotate -/+30 deg · R +90 · T +180 · F resize small/default · G move · V fast squeeze left
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
@@ -56,7 +57,7 @@ export class DebugScene extends Phaser.Scene {
     this.readout = this.add.text(16, 12, '', { ...mono, color: toCss(theme.text) }).setResolution(renderScale());
     this.boxText = this.add.text(16, 80, '', { ...mono, color: toCss(theme.textDim) }).setResolution(renderScale());
     this.add
-      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
+      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
       .setOrigin(0.5)
       .setResolution(renderScale());
 
@@ -68,8 +69,16 @@ export class DebugScene extends Phaser.Scene {
       FOUR: () => aimed(this.world.pool, { x: this.world.box.halfWidth, y: -this.world.box.halfHeight, target: this.world.soul.pos, speed: px(180), count: 3, spread: 0.3 }),
       FIVE: () => ring(this.world.pool, { x: 0, y: 0, count: 10, speed: px(60), radius: px(20), style: { shape: 'rect', a: px(10), b: px(4), spin: 3 } }),
       SIX: () => this.fireSplitBeams(),
-      SEVEN: () => ring(this.world.pool, { x: 0, y: 0, count: 12, speed: px(70), radius: px(25), style: { a: px(6), type: 'kr', damage: 15 } }),
+      SEVEN: () => ring(this.world.pool, { x: 0, y: 0, count: 12, speed: px(70), radius: px(25), style: { a: px(6), kind: 'kr', damage: 15 } }),
       EIGHT: () => ring(this.world.pool, { x: 0, y: 0, count: 8, speed: px(110), radius: px(20), style: { shape: 'triangle', a: px(8), spin: 2, lifetime: 6, onWall: () => 'bounce' } }),
+      // One slow bullet of each projectile type, left to right: white, blue, orange, KR.
+      NINE: () =>
+        PROJECTILE_TYPES.forEach((kind, i) =>
+          this.world.pool.spawn({
+            shape: 'circle', kind, a: px(10), damage: 8,
+            x: (i - 1.5) * (this.world.box.halfWidth / 2), y: -this.world.box.halfHeight - px(20), vy: px(40),
+          }),
+        ),
       ZERO: () => this.stress(),
     };
     for (const [key, fn] of Object.entries(fire)) kb.on(`keydown-${key}`, fn);

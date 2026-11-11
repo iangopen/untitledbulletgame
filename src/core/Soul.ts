@@ -48,6 +48,12 @@ export class Soul {
   kr = 0;
   /** Seconds of invulnerability remaining. */
   iframes = 0;
+  /**
+   * Whether the soul moved under player input in the current step (set by move()). Pressing into a
+   * wall without moving counts as still; being carried by the box doesn't count as moving.
+   * Blue/orange projectiles read this (combat/projectile.ts).
+   */
+  moving = false;
 
   get alive(): boolean {
     return this.hp > 0;
@@ -62,7 +68,10 @@ export class Soul {
    * so "up" always moves up on screen even when the box is rotated.
    */
   move(input: MoveInput, dt: number, box: Box): void {
+    this.moving = false;
     if (!this.alive) return;
+    const x0 = this.pos.x;
+    const y0 = this.pos.y;
     let { dx, dy } = input;
     if (dx !== 0 && dy !== 0) {
       // Diagonals move at the same speed as straight lines.
@@ -74,6 +83,7 @@ export class Soul {
     this.pos.x += d.x * speed * dt;
     this.pos.y += d.y * speed * dt;
     box.clampLocal(this.pos, this.hitRadius);
+    this.moving = Math.abs(this.pos.x - x0) > 1e-9 || Math.abs(this.pos.y - y0) > 1e-9;
   }
 
   /** Advance timers and KR drain by one fixed step. */
@@ -115,5 +125,6 @@ export class Soul {
     this.hp = this.maxHp;
     this.kr = 0;
     this.iframes = 0;
+    this.moving = false;
   }
 }

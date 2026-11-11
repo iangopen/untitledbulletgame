@@ -84,15 +84,14 @@ export class BattleView {
     b.rotation = src.rotation;
     b.a = src.a;
     b.b = src.b;
-    b.type = src.type;
-    b.color = src.color;
+    b.kind = src.kind;
     b.noPop = true;
     g.t = 0;
     g.live = true;
   }
 
   private colorOf(b: Bullet): number {
-    return b.type === 'kr' ? theme.bulletKr : b.color || theme.bulletNormal;
+    return theme.bullet[b.kind];
   }
 
   /** Puts a bullet's exact shape in world space. Returns vertex count in `w`, or 0 for a circle (center tmp, radius c.r). */

@@ -2,6 +2,7 @@ import { Box } from './Box';
 import { Soul, type MoveInput } from './Soul';
 import { BulletPool } from '../combat/BulletPool';
 import { bulletHitsCircle } from '../combat/hitTest';
+import { damageTypeOf, projectileHurts } from '../combat/projectile';
 import type { Circle } from '../combat/Collision';
 import { BOX_HEIGHT, BOX_WIDTH, WALL_CONTACT_EPS } from '../tuning';
 import { WALLS } from './Box';
@@ -83,8 +84,10 @@ export class World {
     hit.r = soul.hitRadius;
     for (const b of pool.all) {
       if (!b.active || !bulletHitsCircle(b, hit)) continue;
+      // Projectile type rules (blue/orange) are decided in one place, from this step's movement.
+      if (!projectileHurts(b.kind, soul.moving)) continue;
       // All damage goes through Soul.damage; it decides i-frames and KR.
-      if (soul.damage({ amount: b.damage, type: b.type }) !== 'blocked') this.lastHitStep = this.steps;
+      if (soul.damage({ amount: b.damage, type: damageTypeOf(b.kind) }) !== 'blocked') this.lastHitStep = this.steps;
     }
 
     // 3. Damaging walls: contact = soul pressed against the wall. Damage goes through Soul.damage.

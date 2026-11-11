@@ -1,4 +1,4 @@
-import type { DamageType } from '../core/Soul';
+import type { ProjectileType } from './projectile';
 import type { Circle, Rect, Triangle } from './Collision';
 import { SPAWN_POP_TIME } from '../tuning';
 
@@ -40,7 +40,8 @@ export interface BulletSpec {
   a: number;
   b?: number;
   damage: number;
-  type?: DamageType;
+  /** Projectile type (default white). Decides the hit rule and the color. */
+  kind?: ProjectileType;
   /** Seconds; Infinity = until it leaves the box. */
   lifetime?: number;
   owner?: string;
@@ -52,8 +53,6 @@ export interface BulletSpec {
   gen?: number;
   /** Owner-defined bit flags (e.g. "already refracted"). */
   flags?: number;
-  /** Fill color; 0 = theme default for its damage type. KR always draws magenta. */
-  color?: number;
 }
 
 export class Bullet {
@@ -69,7 +68,7 @@ export class Bullet {
   a = 0;
   b = 0;
   damage = 0;
-  type: DamageType = 'normal';
+  kind: ProjectileType = 'white';
   lifetime = Infinity;
   age = 0;
   owner = '';
@@ -78,7 +77,6 @@ export class Bullet {
   noPop = false;
   gen = 0;
   flags = 0;
-  color = 0;
   /** Pre-step position and rotation, for render interpolation only. Spawns start equal to the current state. */
   px = 0;
   py = 0;
@@ -97,7 +95,7 @@ export class Bullet {
     this.a = s.a;
     this.b = s.b ?? s.a;
     this.damage = s.damage;
-    this.type = s.type ?? 'normal';
+    this.kind = s.kind ?? 'white';
     this.lifetime = s.lifetime ?? Infinity;
     this.age = 0;
     this.owner = s.owner ?? '';
@@ -106,7 +104,6 @@ export class Bullet {
     this.noPop = s.noPop ?? false;
     this.gen = s.gen ?? 0;
     this.flags = s.flags ?? 0;
-    this.color = s.color ?? 0;
     this.snapshot();
     return this;
   }

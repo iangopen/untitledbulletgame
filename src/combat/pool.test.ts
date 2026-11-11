@@ -162,8 +162,8 @@ describe('patterns', () => {
   });
   it('pattern style carries shape, damage and type', () => {
     const p = new BulletPool(32);
-    ring(p, { x: 0, y: 0, count: 2, speed: 1, style: { shape: 'triangle', a: 7, damage: 9, type: 'kr', owner: 'prism' } });
-    for (const b of active(p)) expect([b.shape, b.a, b.damage, b.type, b.owner]).toEqual(['triangle', 7, 9, 'kr', 'prism']);
+    ring(p, { x: 0, y: 0, count: 2, speed: 1, style: { shape: 'triangle', a: 7, damage: 9, kind: 'kr', owner: 'prism' } });
+    for (const b of active(p)) expect([b.shape, b.a, b.damage, b.kind, b.owner]).toEqual(['triangle', 7, 9, 'kr', 'prism']);
   });
   it('patterns report fewer spawns when the pool is full', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -193,7 +193,7 @@ describe('World: bullets damage the soul only through Soul.damage', () => {
   });
   it('KR bullets fill the pool instead of hitting HP (rules unchanged)', () => {
     const w = new World(0, 0);
-    w.pool.spawn({ shape: 'rect', x: 0, y: 0, a: 20, b: 2, damage: 15, type: 'kr', noPop: true });
+    w.pool.spawn({ shape: 'rect', x: 0, y: 0, a: 20, b: 2, damage: 15, kind: 'kr', noPop: true });
     w.step({ dx: 0, dy: 0, slow: false }, 1 / 60);
     expect(w.soul.kr).toBeGreaterThan(14);
     expect(w.soul.hp).toBeGreaterThan(99);
