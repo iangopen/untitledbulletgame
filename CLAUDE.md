@@ -68,14 +68,26 @@ src/
 9. Polish and scoring
 
 ## Status
-### Real (built and verified)
-- Nothing yet. Repo not scaffolded.
+### Real (built and verified): Phase 1 "Feel"
+- Vite + TS strict + Phaser 3.90 scaffold; `npm run build` (tsc + vite) and `npm test` (36 Vitest tests) pass.
+- `src/tuning.ts`: every feel constant in one file. Current values: SOUL_SPEED 170 px/s, SLOW_MULTIPLIER 0.45, HITBOX_RADIUS 3 px (drawn diamond is 16 px across), MAX_HP 100, IFRAME_DURATION 1.0 s (blink period 0.1 s), KR_DRAIN_RATE 8 HP/s, box 300x220 px. Canvas is 640x480, FIT-scaled.
+- `core/Clock.ts`: fixed 60 Hz accumulator. Each frame is capped at 0.25 s to avoid a spiral of death. BattleScene feeds it `performance.now()` deltas, NOT Phaser's `delta`, because Phaser smooths and caps that, which slowed the simulation when the frame rate dropped. Verified: identical movement at 30, 60 and 144 fps.
+- `core/Box.ts`: centered static box; `toWorld`/`toLocal`/`clampLocal` already handle rotation (tested round-trip).
+- `core/Soul.ts`: pure logic, box-local position, 8-direction movement (diagonals normalized), Shift slow mode, clamped to the interior by the hitbox radius. `damage({amount,type})` is the only damage path. Normal hit: immediate HP loss plus i-frames. KR hit: adds to the pool and grants i-frames; the pool drains continuously (including during i-frames) and never takes HP below 1. The KR pool is capped at hp-1.
+- `combat/Collision.ts`: circle vs circle/rect (rotated)/triangle, pure and tested.
+- BattleScene: geometric render (black box with white border, red diamond soul that blinks in i-frames, hitbox dot visible while slow, bullets masked to the box), HP bar with the KR portion in magenta and "KR" text. Dev-only `window.__battle` handle.
+- TEMPORARY spawner in BattleScene (clearly marked): side lines with a gap, aimed shots, and a sweeping KR bar. Delete it in Phase 2.
+- Browser-verified on the dev server: 8-direction movement, slow mode, edge clamping, single hit plus i-frame blocking, KR drain, and no console errors.
 
 ### Open
+- Tuning values above are first guesses; tune by feel
+- Whether KR hits should grant i-frames (currently yes) and whether KR can kill (currently no)
+- Phase 2: Bullet, BulletPool, patterns, debug spawn scene (replaces the temp spawner)
+- Bundle is about 1.5 MB (Phaser); chunk warning suppressed, revisit at deploy
 - KR source: specific characters only, or general?
 - Wave mode: hand-designed or generated?
 - Shop currency source
-- Timer length (guess 2–3 min), max HP, soul speed, hitbox size
+- Timer length (guess 2–3 min)
 - Scoring
 - Characters 2–5
 - Game name
