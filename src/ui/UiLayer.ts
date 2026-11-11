@@ -98,6 +98,7 @@ class UiLayer {
   /** Fade the current screen out (scene transitions call this alongside the camera fade). */
   fadeOut(): void {
     this.screen?.classList.remove('shown');
+    this.screen?.classList.add('leaving');
   }
 
   /** Remove `screen` if it is the one shown (or whatever is shown, when omitted). */

@@ -19,6 +19,8 @@ export const UI_CSS = `
 }
 #ui-root .screen { position: absolute; inset: 0; opacity: 0; transition: opacity ${SCENE_FADE_MS}ms linear; }
 #ui-root .screen.shown { opacity: 1; }
+/* A screen fading out takes no mouse input (its scene also ignores keys; see scenes/ui.ts go()). */
+#ui-root .screen.leaving, #ui-root .screen.leaving * { pointer-events: none !important; }
 #ui-root .abs { position: absolute; white-space: nowrap; }
 #ui-root .a-center { transform: translate(-50%, -50%); }
 #ui-root .a-left { transform: translate(0, -50%); }
