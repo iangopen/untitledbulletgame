@@ -10,6 +10,7 @@ import { registry } from '../characters/registry';
 import { at, h, replay } from '../ui/dom';
 import { enter, go, mountScreen } from './ui';
 import { px } from '../tuning';
+import { perfOverlay } from '../ui/PerfOverlay';
 
 export interface BattleData {
   roster?: Roster;
@@ -83,7 +84,10 @@ export class BattleScene extends Phaser.Scene {
         world: this.world, view: this.view, loop: this.loop, director: this.director, scene: this,
       };
     }
-    this.events.once('shutdown', () => this.director.dispose());
+    this.events.once('shutdown', () => {
+      this.director.dispose();
+      perfOverlay.bullets = -1;
+    });
     this.updateHud();
   }
 
@@ -189,6 +193,7 @@ export class BattleScene extends Phaser.Scene {
     if (!this.paused) this.loop.frame((input, dt) => this.director.step(input, dt));
     this.view.draw(this.paused ? 0 : this.loop.realDt);
     this.updateHud();
+    perfOverlay.bullets = this.world.pool.activeCount;
 
     const outcome = this.director.outcome;
     if (outcome && !this.ending) {

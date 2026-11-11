@@ -13,6 +13,7 @@ import { ResultsScene } from './scenes/ResultsScene';
 import { theme } from './render/theme';
 import { initialCanvasSize, installResize } from './render/display';
 import { ui } from './ui/UiLayer';
+import { perfOverlay } from './ui/PerfOverlay';
 
 async function boot(): Promise<void> {
   // Make sure the webfonts are ready before the first screen renders (DOM UI and dev Phaser text).
@@ -39,6 +40,8 @@ async function boot(): Promise<void> {
     scene: [MenuScene, RosterScene, BattleScene, ResultsScene],
   });
   installResize(game);
+  // F3 performance overlay, in every build.
+  perfOverlay.install(game);
   ui.attachCanvas(game.canvas);
 
   // Dev-only: DEV is a build-time constant, so this branch and DebugScene are dropped from production.

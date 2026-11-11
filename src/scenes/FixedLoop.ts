@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Clock, STEP } from '../core/Clock';
 import type { MoveInput } from '../core/Soul';
+import { perfOverlay } from '../ui/PerfOverlay';
 
 type KeyName = 'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'shift';
 
@@ -45,6 +46,7 @@ export class FixedLoop {
     this.realDt = this.last === 0 ? 0 : (now - this.last) / 1000;
     this.last = now;
     const n = this.clock.advance(this.realDt);
+    perfOverlay.steps = n;
     for (let i = 0; i < n; i++) {
       const t0 = performance.now();
       step(this.input, STEP);
