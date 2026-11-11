@@ -43,8 +43,19 @@ export class World {
     this.box.bus = this.bus;
   }
 
+  /**
+   * Record every moving object's state before a step, for render interpolation.
+   * Drawing blends prev -> current; collision and logic only ever read the current state.
+   */
+  snapshot(): void {
+    this.box.snapshot();
+    this.soul.snapshot();
+    for (const b of this.pool.all) if (b.active) b.snapshot();
+  }
+
   step(input: MoveInput, dt: number): void {
     const { soul, pool, box } = this;
+    this.snapshot();
     this.steps++;
     this.time += dt;
     // 1. Box motion. Anchored resizes report a content shift so contents stay world-fixed.

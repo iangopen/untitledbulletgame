@@ -79,6 +79,10 @@ export class Bullet {
   gen = 0;
   flags = 0;
   color = 0;
+  /** Pre-step position and rotation, for render interpolation only. Spawns start equal to the current state. */
+  px = 0;
+  py = 0;
+  prot = 0;
 
   init(s: BulletSpec): this {
     this.active = true;
@@ -103,7 +107,15 @@ export class Bullet {
     this.gen = s.gen ?? 0;
     this.flags = s.flags ?? 0;
     this.color = s.color ?? 0;
+    this.snapshot();
     return this;
+  }
+
+  /** Record the pre-step state for render interpolation. */
+  snapshot(): void {
+    this.px = this.x;
+    this.py = this.y;
+    this.prot = this.rotation;
   }
 
   /** Spawn-pop scale; draw and hitbox both use it. Eases 0.6 -> 1 (no overshoot, so the hitbox never exceeds its final size). */

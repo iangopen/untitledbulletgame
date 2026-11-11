@@ -73,6 +73,8 @@ export class Box {
    * resize moves the center. World applies it to the soul and bullets.
    */
   readonly contentShift: Vec2 = { x: 0, y: 0 };
+  /** Geometry at the start of the current step, for render interpolation only. */
+  readonly prev: BoxState;
 
   constructor(
     public x: number,
@@ -83,6 +85,17 @@ export class Box {
   ) {
     this.defaults = { x, y, width, height, rotation };
     this.walls = { left: safeWall(), right: safeWall(), top: safeWall(), bottom: safeWall() };
+    this.prev = { x, y, width, height, rotation };
+  }
+
+  /** Record the pre-step geometry for render interpolation. */
+  snapshot(): void {
+    const p = this.prev;
+    p.x = this.x;
+    p.y = this.y;
+    p.width = this.width;
+    p.height = this.height;
+    p.rotation = this.rotation;
   }
 
   get halfWidth(): number {
@@ -194,6 +207,7 @@ export class Box {
     this.size = this.pos = this.rot = null;
     for (const w of WALLS) Object.assign(this.walls[w], safeWall());
     this.contentShift.x = this.contentShift.y = 0;
+    this.snapshot();
   }
 
   get state(): BoxState {

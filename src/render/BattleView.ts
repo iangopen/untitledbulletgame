@@ -6,6 +6,7 @@ import type { Circle, Rect, Triangle } from '../combat/Collision';
 import { line, rgb, theme } from './theme';
 import { renderScale } from './display';
 import { px } from '../tuning';
+import { BoxFrame, interpBullet, lerpPoint } from './interp';
 import {
   DESPAWN_FADE_TIME,
   HIT_FLASH_MS,
@@ -44,6 +45,10 @@ export class BattleView {
   private ghostNext = 0;
   private lastHitSeen = -1;
   showHitboxes = false;
+  /** Box geometry being drawn this frame (interpolated). All drawing transforms go through it. */
+  private readonly frame = new BoxFrame();
+  /** Scratch bullet holding a bullet's interpolated drawable state. Never in the pool, never collides. */
+  private readonly ib = new Bullet();
 
   // Scratch objects: no per-frame allocation.
   private readonly c: Circle = { x: 0, y: 0, r: 0 };
@@ -91,7 +96,7 @@ export class BattleView {
 
   /** Puts a bullet's exact shape in world space. Returns vertex count in `w`, or 0 for a circle (center tmp, radius c.r). */
   private shapeWorld(b: Bullet): number {
-    const box = this.world.box;
+    const box = this.frame;
     if (b.shape === 'circle') {
       bulletCircle(b, this.c);
       box.toWorld(this.c, this.tmp);
@@ -127,8 +132,15 @@ export class BattleView {
     }
   }
 
-  draw(realDt: number): void {
-    const { box, soul, pool } = this.world;
+  /**
+   * Draw the world. `alpha` (0..1) blends each object from its pre-step to its current simulated
+   * state (render interpolation). The hitbox overlay forces alpha 1, so with it on the drawn shapes
+   * are exactly the collision shapes.
+   */
+  draw(realDt: number, alpha = 1): void {
+    const { soul, pool } = this.world;
+    const t = this.showHitboxes ? 1 : Math.min(1, Math.max(0, alpha));
+    const box = this.frame.set(this.world.box, t);
     const hw = box.halfWidth;
     const hh = box.halfHeight;
 
@@ -145,7 +157,7 @@ export class BattleView {
     g.fillPath();
     // Walls: safe = thin white; damaging = thick amber (normal) or magenta (KR). Never red.
     for (const [wall, a, b] of WALL_EDGES) {
-      const ws = box.walls[wall];
+      const ws = this.world.box.walls[wall];
       const p0 = this.w[a]!;
       const p1 = this.w[b]!;
       if (ws.damaging) {
@@ -187,12 +199,12 @@ export class BattleView {
       this.path(bg, 3);
       bg.strokePath();
     }
-    for (const b of pool.all) if (b.active) this.fillBullet(bg, b, 1);
+    for (const b of pool.all) if (b.active) this.fillBullet(bg, interpBullet(b, t, this.ib), 1);
 
     // Soul: solid circle, drawn radius == hit radius. Blinks during i-frames.
     const sg = this.soulGfx;
     sg.clear();
-    const sw = box.toWorld(soul.pos, this.tmp);
+    const sw = box.toWorld(lerpPoint(soul.prev.x, soul.prev.y, soul.pos.x, soul.pos.y, t, this.tmp2), this.tmp);
     const blinkOff = soul.invulnerable && Math.floor(soul.iframes / IFRAME_BLINK_PERIOD) % 2 === 0;
     if (soul.alive && !blinkOff) {
       sg.fillStyle(theme.soul, 1);
@@ -217,7 +229,8 @@ export class BattleView {
     const og = this.overlayGfx;
     og.clear();
     if (!this.showHitboxes) return;
-    const { box, soul, pool } = this.world;
+    const { soul, pool } = this.world;
+    const box = this.frame; // equals the simulated box: alpha is forced to 1 while the overlay is on
     // Hairline: 1 device pixel, so it shows exactly where the shape edge is at any zoom.
     og.lineStyle(1 / renderScale(), theme.hitboxOutline, 1);
     for (const b of pool.all) {

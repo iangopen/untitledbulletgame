@@ -37,6 +37,8 @@ export type DamageResult = 'applied' | 'blocked' | 'dead';
 export class Soul {
   /** Box-local position (DEFAULT, Ian may change): the soul rides with the box when it moves or rotates. */
   readonly pos: Vec2 = { x: 0, y: 0 };
+  /** Position at the start of the current step. Drawing only (render interpolation); logic never reads it. */
+  readonly prev: Vec2 = { x: 0, y: 0 };
   private readonly dir: Vec2 = { x: 0, y: 0 };
   /** Drawn radius == collision radius. */
   readonly hitRadius = SOUL_RADIUS;
@@ -100,9 +102,16 @@ export class Soul {
     return this.alive ? 'applied' : 'dead';
   }
 
+  /** Record the pre-step state for render interpolation. */
+  snapshot(): void {
+    this.prev.x = this.pos.x;
+    this.prev.y = this.pos.y;
+  }
+
   reset(): void {
     this.pos.x = 0;
     this.pos.y = 0;
+    this.snapshot();
     this.hp = this.maxHp;
     this.kr = 0;
     this.iframes = 0;

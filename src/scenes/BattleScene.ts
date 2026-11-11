@@ -190,8 +190,18 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(): void {
-    if (!this.paused) this.loop.frame((input, dt) => this.director.step(input, dt));
-    this.view.draw(this.paused ? 0 : this.loop.realDt);
+    if (!this.paused) {
+      this.loop.frame((input, dt) => {
+        const before = this.world.steps;
+        this.director.step(input, dt);
+        // Once the battle has frozen the world no longer steps; settle the snapshots so
+        // interpolation draws the final state instead of blending stale ones.
+        if (this.world.steps === before) this.world.snapshot();
+      });
+    }
+    // Render interpolation: blend by the leftover step fraction. While paused the clock is not
+    // advanced, so alpha holds still and pause/resume never jumps.
+    this.view.draw(this.paused ? 0 : this.loop.realDt, this.loop.clock.alpha);
     this.updateHud();
     perfOverlay.bullets = this.world.pool.activeCount;
 
