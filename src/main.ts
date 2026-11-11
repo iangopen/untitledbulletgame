@@ -10,8 +10,11 @@ import { MenuScene } from './scenes/MenuScene';
 import { RosterScene } from './scenes/RosterScene';
 import { BattleScene } from './scenes/BattleScene';
 import { ResultsScene } from './scenes/ResultsScene';
+import { SettingsScene } from './scenes/SettingsScene';
+import { frameLimiter } from './render/frameLimiter';
+import { settings } from './settings/store';
 import { theme } from './render/theme';
-import { initialCanvasSize, installResize } from './render/display';
+import { initialCanvasSize, installResize, refit } from './render/display';
 import { ui } from './ui/UiLayer';
 import { perfOverlay } from './ui/PerfOverlay';
 
@@ -37,11 +40,20 @@ async function boot(): Promise<void> {
     // FIT + CENTER_BOTH keeps the 16:9 view centered; the canvas is already device-pixel sized (see display.ts).
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     // Flow: Menu -> Roster -> Battle -> Results (-> Battle retry | Roster). First scene listed starts.
-    scene: [MenuScene, RosterScene, BattleScene, ResultsScene],
+    // Settings is last so it draws over a paused Battle.
+    scene: [MenuScene, RosterScene, BattleScene, ResultsScene, SettingsScene],
   });
   installResize(game);
   // F3 performance overlay, in every build.
   perfOverlay.install(game);
+  // Frame-rate limit + display refresh measurement (skips whole display ticks; never touches the sim).
+  frameLimiter.install(game);
+  // Settings apply live: quality refits the canvas now; Show FPS pins the overlay.
+  perfOverlay.setVisible(settings.current.showFps);
+  settings.onChange((s, changed) => {
+    if (changed.includes('quality')) refit(game);
+    if (changed.includes('showFps')) perfOverlay.setVisible(s.showFps);
+  });
   ui.attachCanvas(game.canvas);
 
   // Dev-only: DEV is a build-time constant, so this branch and DebugScene are dropped from production.

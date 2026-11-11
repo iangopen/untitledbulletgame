@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { VIEW } from './theme';
+import { qualityCap } from '../settings/settings';
+import { settings } from '../settings/store';
 
 /**
  * Crisp rendering at any window size and DPI.
@@ -9,6 +11,8 @@ import { VIEW } from './theme';
  * the view occupies (fit-to-host x devicePixelRatio) and each scene's main camera zooms the view up
  * to that size, so shapes are drawn at physical resolution and nothing is upscaled by CSS.
  * Re-fits on window resize, host resize and devicePixelRatio changes.
+ * Render quality (Settings) caps the ratio used: Full = devicePixelRatio, Balanced = at most 1.5x
+ * CSS size, Performance = 1x CSS size (the browser upscales the canvas; the HTML UI stays native).
  * UI text is not drawn here at all: it lives in the HTML layer (src/ui), which the browser
  * rasterises natively.
  */
@@ -27,7 +31,7 @@ function hostSize(): { w: number; h: number } {
 export function computeScale(): number {
   const { w, h } = hostSize();
   const fit = Math.min(w / VIEW.width, h / VIEW.height);
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, qualityCap(settings.current.quality));
   return Math.max(MIN_SCALE, Math.min(MAX_SCALE, fit * dpr));
 }
 
@@ -51,24 +55,31 @@ function forEachText(list: Phaser.GameObjects.GameObject[], fn: (t: Phaser.GameO
   }
 }
 
+/**
+ * Re-size the canvas backing store to the current scale and re-point every running or paused
+ * scene's camera (a paused Battle sits under Settings). Called on resize and on quality changes.
+ */
+export function refit(game: Phaser.Game): void {
+  const next = computeScale();
+  if (Math.abs(next - current) > 1e-3) {
+    current = next;
+    game.scale.resize(Math.round(VIEW.width * current), Math.round(VIEW.height * current));
+    for (const scene of game.scene.getScenes(false)) {
+      if (!scene.sys.isActive() && !scene.sys.isPaused()) continue;
+      applyView(scene);
+      forEachText(scene.children.list, (t) => t.setResolution(current));
+    }
+  }
+  // Re-fit and re-center the canvas to its parent (Phaser only does this on window resize).
+  game.scale.refresh();
+  // Tell overlays (the HTML UI layer) the canvas may have moved.
+  window.dispatchEvent(new Event('game-refit'));
+}
+
 /** Resize the canvas with the window and re-rasterise text so it stays crisp. */
 export function installResize(game: Phaser.Game): void {
   let pending: ReturnType<typeof setTimeout> | undefined;
-  const apply = () => {
-    const next = computeScale();
-    if (Math.abs(next - current) > 1e-3) {
-      current = next;
-      game.scale.resize(Math.round(VIEW.width * current), Math.round(VIEW.height * current));
-      for (const scene of game.scene.getScenes(true)) {
-        applyView(scene);
-        forEachText(scene.children.list, (t) => t.setResolution(current));
-      }
-    }
-    // Re-fit and re-center the canvas to its parent (Phaser only does this on window resize).
-    game.scale.refresh();
-    // Tell overlays (the HTML UI layer) the canvas may have moved.
-    window.dispatchEvent(new Event('game-refit'));
-  };
+  const apply = () => refit(game);
   // Debounced with a timer, not rAF, so it still runs when frames are throttled.
   const onResize = () => {
     clearTimeout(pending);

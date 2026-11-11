@@ -7,6 +7,7 @@ import { line, rgb, theme } from './theme';
 import { renderScale } from './display';
 import { px } from '../tuning';
 import { BoxFrame, interpBullet, lerpPoint } from './interp';
+import { flashScreen, shakeScreen } from './effects';
 import {
   DESPAWN_FADE_TIME,
   HIT_FLASH_MS,
@@ -215,9 +216,10 @@ export class BattleView {
     if (this.world.lastHitStep !== this.lastHitSeen) {
       this.lastHitSeen = this.world.lastHitStep;
       const cam = this.scene.cameras.main;
-      cam.shake(HIT_SHAKE_MS, HIT_SHAKE_INTENSITY);
+      // Through the effects gate, so the Settings toggles apply.
+      shakeScreen(cam, HIT_SHAKE_MS, HIT_SHAKE_INTENSITY);
       const [r, gr, b] = rgb(theme.hitFlash);
-      cam.flash(HIT_FLASH_MS, r, gr, b, true);
+      flashScreen(cam, HIT_FLASH_MS, r, gr, b);
     }
 
     this.drawOverlay();

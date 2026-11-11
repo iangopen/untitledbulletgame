@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { FrameStats } from '../render/frameStats';
 import { fonts, toCss, theme } from '../render/theme';
+import { frameLimiter } from '../render/frameLimiter';
 
 /**
  * Performance overlay, toggled with F3 in every build (Ian reads it on his own machine).
@@ -30,8 +31,10 @@ class PerfOverlay {
   private lastStart = 0;
   private lastPaint = 0;
   private readonly recent: number[] = [];
+  private canvas: HTMLCanvasElement | null = null;
 
   install(game: Phaser.Game): void {
+    this.canvas = game.canvas;
     game.events.on('prestep', () => {
       const now = performance.now();
       this.frameStart = now;
@@ -57,7 +60,13 @@ class PerfOverlay {
   }
 
   toggle(): void {
-    this.visible = !this.visible;
+    this.setVisible(!this.visible);
+  }
+
+  /** Settings "Show FPS" keeps it on; F3 still toggles it for the session. */
+  setVisible(v: boolean): void {
+    if (v === this.visible) return;
+    this.visible = v;
     if (this.visible) {
       this.ensureDom();
       this.stats.clear();
@@ -95,7 +104,10 @@ class PerfOverlay {
       `fps ${s.fps.toFixed(0)}   interval ${s.intervalMedian.toFixed(2)} ms\n` +
       `steps/frame  0:${pct(s0)}%  1:${pct(s1)}%  2:${pct(s2)}%  3+:${pct(s3)}%\n` +
       `frame ms  med ${s.workMedian.toFixed(2)}  p99 ${s.workP99.toFixed(2)}  max ${s.workMax.toFixed(2)}\n` +
-      `dropped ${s.dropped}/${s.frames}   bullets ${this.bullets < 0 ? '-' : this.bullets}   dpr ${window.devicePixelRatio}`;
+      `dropped ${s.dropped}/${s.frames}   bullets ${this.bullets < 0 ? '-' : this.bullets}   dpr ${window.devicePixelRatio}
+` +
+      `display ${frameLimiter.measured ? `${frameLimiter.hz} Hz` : 'measuring'}   draw every ${frameLimiter.divisor}   ` +
+      `canvas ${this.canvas?.width ?? 0}x${this.canvas?.height ?? 0}`;
     this.drawGraph();
   }
 

@@ -13,6 +13,7 @@ interface Option {
 const OPTIONS: Option[] = [
   { text: 'Timer', available: true },
   { text: 'Waves', available: false, note: 'soon' },
+  { text: 'Settings', available: true },
 ];
 
 /** The ?roster= dev shortcut applies once per page load, not every time the menu opens. */
@@ -98,6 +99,7 @@ export class MenuScene extends Phaser.Scene {
       replay(this.rows[this.index]!, 'nudge');
       return;
     }
-    go(this, 'Roster');
+    if (o.text === 'Settings') go(this, 'Settings', { from: 'Menu' });
+    else go(this, 'Roster');
   }
 }

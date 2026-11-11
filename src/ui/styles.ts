@@ -63,6 +63,13 @@ export const UI_CSS = `
 #ui-root .arrow:hover { color: ${c(theme.text)}; }
 #ui-root .level.zero { color: ${c(theme.textDim)}; }
 
+/* Settings rows: label left, ‹ value › right; the red dot sits left of the row like menus. */
+#ui-root .srow { width: 560px; display: flex; justify-content: space-between; align-items: center; }
+#ui-root .srow .val { display: flex; align-items: center; gap: 2px; }
+#ui-root .srow .v { min-width: 150px; text-align: center; }
+#ui-root .srow .arrow { font-size: ${type.body}px; }
+#ui-root .srow.sel .arrow { color: ${c(theme.textDim)}; }
+
 /* Quiet HUD button (pause): dim, bright on hover. */
 #ui-root .hud-btn { color: ${c(theme.textDim)}; padding: 8px 0; }
 #ui-root .hud-btn:hover { color: ${c(theme.text)}; }

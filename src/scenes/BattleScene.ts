@@ -11,12 +11,13 @@ import { at, h, replay } from '../ui/dom';
 import { enter, go, mountScreen } from './ui';
 import { px } from '../tuning';
 import { perfOverlay } from '../ui/PerfOverlay';
+import { ui } from '../ui/UiLayer';
 
 export interface BattleData {
   roster?: Roster;
 }
 
-const PAUSE_OPTIONS = ['Resume', 'Restart', 'Quit to roster'] as const;
+const PAUSE_OPTIONS = ['Resume', 'Settings', 'Restart', 'Quit to roster'] as const;
 /** Real ms between the outcome and the results screen, so the final hit reads. */
 const END_DELAY_MS = 700;
 
@@ -49,6 +50,7 @@ export class BattleScene extends Phaser.Scene {
   private pauseBtn!: HTMLElement;
   private pauseEl!: HTMLElement;
   private pauseItems: HTMLElement[] = [];
+  private hudScreen!: HTMLElement;
   private shownTimer = '';
   private shownHp = '';
 
@@ -84,7 +86,14 @@ export class BattleScene extends Phaser.Scene {
         world: this.world, view: this.view, loop: this.loop, director: this.director, scene: this,
       };
     }
+    // Back from Settings: show the HUD and pause menu again (still paused).
+    const onResume = () => {
+      ui.show(this.hudScreen);
+      this.renderPause();
+    };
+    this.events.on('resume', onResume);
     this.events.once('shutdown', () => {
+      this.events.off('resume', onResume);
       this.director.dispose();
       perfOverlay.bullets = -1;
     });
@@ -93,6 +102,7 @@ export class BattleScene extends Phaser.Scene {
 
   private buildHud(): void {
     const screen = h('div');
+    this.hudScreen = screen;
     // HUD: countdown top center, roster summary top left, hp value beside the canvas bar, one quiet hint.
     this.timerEl = at(h('div', 't-number mono'), VIEW.cx, 92);
     const summary = registry
@@ -165,6 +175,11 @@ export class BattleScene extends Phaser.Scene {
   private choosePause(i: number): void {
     const choice = PAUSE_OPTIONS[i];
     if (choice === 'Resume') this.resume();
+    else if (choice === 'Settings') {
+      // Settings opens over the paused battle; this scene sleeps (no update, no keys) until it returns.
+      this.scene.pause();
+      this.scene.launch('Settings', { from: 'Battle' });
+    }
     else if (choice === 'Restart') go(this, 'Battle', { roster: { ...this.roster } });
     else go(this, 'Roster', { roster: { ...this.roster } });
   }
