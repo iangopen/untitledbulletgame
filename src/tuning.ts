@@ -13,10 +13,19 @@ export const px = (original: number): number => original * WORLD_SCALE;
 
 /** Soul movement speed in px/s (was 170). */
 export const SOUL_SPEED = px(170);
-/** Speed multiplier while Shift is held. */
+/** Speed multiplier while Space is held (slow movement). */
 export const SLOW_MULTIPLIER = 0.45;
 /** Soul radius in px (was 6). Drawn circle and collision circle are both exactly this. */
 export const SOUL_RADIUS = px(6);
+
+/** Dash (active ability, Shift): distance (a third of the default box width), duration, cooldown. */
+export const DASH_DISTANCE = px(300) / 3;
+export const DASH_DURATION = 0.12;
+export const DASH_COOLDOWN = 3;
+/** I-frame rule: a dash grants i-frames for exactly its duration (never shortens running i-frames). */
+export const DASH_IFRAMES = DASH_DURATION;
+/** Trail fade after the dash ends (visual only). */
+export const DASH_TRAIL_FADE = 0.16;
 
 /** Maximum HP. */
 export const MAX_HP = 100;

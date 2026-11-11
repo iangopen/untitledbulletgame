@@ -3,7 +3,7 @@ import { Clock, STEP } from '../core/Clock';
 import type { MoveInput } from '../core/Soul';
 import { perfOverlay } from '../ui/PerfOverlay';
 
-type KeyName = 'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'shift';
+type KeyName = 'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'space';
 
 /**
  * Reads movement keys and runs fixed 60 Hz steps from real elapsed time.
@@ -12,7 +12,7 @@ type KeyName = 'up' | 'down' | 'left' | 'right' | 'w' | 'a' | 's' | 'd' | 'shift
  */
 export class FixedLoop {
   readonly clock = new Clock();
-  readonly input: MoveInput = { dx: 0, dy: 0, slow: false };
+  readonly input: MoveInput = { dx: 0, dy: 0, slow: false, ability: false };
   private readonly keys: Record<KeyName, Phaser.Input.Keyboard.Key>;
   private last = 0;
   /** Seconds of real time covered by the last frame. */
@@ -26,13 +26,21 @@ export class FixedLoop {
     const K = Phaser.Input.Keyboard.KeyCodes;
     this.keys = scene.input.keyboard!.addKeys({
       up: K.UP, down: K.DOWN, left: K.LEFT, right: K.RIGHT,
-      w: K.W, a: K.A, s: K.S, d: K.D, shift: K.SHIFT,
+      w: K.W, a: K.A, s: K.S, d: K.D, space: K.SPACE,
     }) as Record<KeyName, Phaser.Input.Keyboard.Key>;
+    // Shift = active ability: latched on keydown and handed to the next fixed step exactly once,
+    // so a press is never lost (frames with no step) or repeated (frames with several).
+    scene.input.keyboard!.on('keydown-SHIFT', (e: KeyboardEvent) => {
+      if (!e.repeat) this.abilityPressed = true;
+    });
   }
+
+  private abilityPressed = false;
 
   /** Forget the last frame time (after a pause) so the clock does not try to catch up. */
   resync(): void {
     this.last = 0;
+    this.abilityPressed = false;
   }
 
   /** Call once per render frame. */
@@ -40,7 +48,7 @@ export class FixedLoop {
     const k = this.keys;
     this.input.dx = (k.right.isDown || k.d.isDown ? 1 : 0) - (k.left.isDown || k.a.isDown ? 1 : 0);
     this.input.dy = (k.down.isDown || k.s.isDown ? 1 : 0) - (k.up.isDown || k.w.isDown ? 1 : 0);
-    this.input.slow = k.shift.isDown;
+    this.input.slow = k.space.isDown;
 
     const now = performance.now();
     this.realDt = this.last === 0 ? 0 : (now - this.last) / 1000;
@@ -49,7 +57,10 @@ export class FixedLoop {
     perfOverlay.steps = n;
     for (let i = 0; i < n; i++) {
       const t0 = performance.now();
+      this.input.ability = this.abilityPressed;
+      this.abilityPressed = false;
       step(this.input, STEP);
+      this.input.ability = false;
       this.lastStepMs = performance.now() - t0;
       if (this.lastStepMs > this.maxStepMs) this.maxStepMs = this.lastStepMs;
     }

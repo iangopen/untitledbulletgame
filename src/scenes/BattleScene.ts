@@ -12,6 +12,7 @@ import { enter, go, mountScreen } from './ui';
 import { px } from '../tuning';
 import { perfOverlay } from '../ui/PerfOverlay';
 import { ui } from '../ui/UiLayer';
+import { browserStorage, createActive, loadLoadout } from '../abilities/loadout';
 
 export interface BattleData {
   roster?: Roster;
@@ -46,6 +47,8 @@ export class BattleScene extends Phaser.Scene {
   // HTML layer
   private timerEl!: HTMLElement;
   private hpEl!: HTMLElement;
+  private abilityEl: HTMLElement | null = null;
+  private shownAbility = '';
   private hintEl!: HTMLElement;
   private pauseBtn!: HTMLElement;
   private pauseEl!: HTMLElement;
@@ -69,12 +72,16 @@ export class BattleScene extends Phaser.Scene {
     this.world = new World(VIEW.cx, VIEW.cy + px(6));
     this.view = new BattleView(this, this.world);
     this.loop = new FixedLoop(this);
+    // The equipped active ability (plain-data loadout; the Phase 8 shop will change it).
+    this.world.ability = createActive(loadLoadout(browserStorage()));
     this.director = new Director(this.world, this.roster, new TimerMode(devDuration()));
     this.paused = false;
     this.ending = false;
     this.lastShownSecond = -1;
     this.shownTimer = '';
     this.shownHp = '';
+    this.shownAbility = '';
+    this.abilityEl = null;
 
     this.buildHud();
     const kb = this.input.keyboard!;
@@ -82,7 +89,6 @@ export class BattleScene extends Phaser.Scene {
     kb.on('keydown-UP', () => this.paused && this.setPause(this.pauseIndex - 1, true));
     kb.on('keydown-DOWN', () => this.paused && this.setPause(this.pauseIndex + 1, true));
     kb.on('keydown-ENTER', () => this.paused && this.choosePause(this.pauseIndex));
-    kb.on('keydown-SPACE', () => this.paused && this.choosePause(this.pauseIndex));
     if (import.meta.env.DEV) {
       kb.on('keydown-H', () => (this.view.showHitboxes = !this.view.showHitboxes));
       kb.on('keydown-BACKTICK', () => this.scene.start('Debug'));
@@ -119,12 +125,23 @@ export class BattleScene extends Phaser.Scene {
     // Mouse route to pause (Esc still works).
     this.pauseBtn = at(h('div', 't-small hud-btn click', 'pause'), VIEW.width - space.lg, space.lg, 'right');
     this.pauseBtn.addEventListener('click', () => (this.paused ? this.resume() : this.pause()));
-    this.hintEl = at(h('div', 't-hint', 'arrows move    shift slow    esc pause'), VIEW.cx, VIEW.height - 40);
-    // Profile boxes: a centered row below the HP bar, one per active character.
+    this.hintEl = at(h('div', 't-hint', `arrows move    space slow    ${this.world.ability ? `shift ${this.world.ability.name}    ` : ''}esc pause`), VIEW.cx, VIEW.height - 40);
+    // Ability bar label (canvas draws the bar itself, from the ActiveAbility interface).
+    const ab = this.world.ability;
+    if (ab) {
+      const a = this.view.abilityBar;
+      this.abilityEl = at(h('div', 't-small dim', ab.name), a.x - 16, midY, 'right');
+      screen.append(this.abilityEl);
+      this.world.bus.on('abilityDenied', () => {
+        this.view.deniedAt = this.view.now;
+        replay(this.abilityEl!, 'nudge');
+      });
+    }
+    // Profile boxes: a centered row directly below the timer, one per active character.
     const active = registry.filter((e) => (this.roster[e.id] ?? 0) > 0);
     const PROFILE = 44;
     const GAP = 12;
-    const rowY = bar.y + bar.h + 46;
+    const rowY = 92 + type.number / 2 + space.sm + PROFILE / 2;
     const rowW = active.length * PROFILE + (active.length - 1) * GAP;
     this.profiles.clear();
     active.forEach((e, i) => {
@@ -228,6 +245,15 @@ export class BattleScene extends Phaser.Scene {
       this.hpEl.textContent = hp;
       this.hpEl.style.color = toCss(soul.kr > 0 ? theme.kr : theme.textDim);
       this.shownHp = hp;
+    }
+    const ab = this.world.ability;
+    if (ab && this.abilityEl) {
+      const state = ab.ready ? 'ready' : 'charging';
+      if (state !== this.shownAbility) {
+        this.abilityEl.style.color = toCss(ab.ready ? theme.text : theme.textDim);
+        if (ab.ready && this.shownAbility) replay(this.abilityEl, 'pop');
+        this.shownAbility = state;
+      }
     }
   }
 

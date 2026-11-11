@@ -7,6 +7,7 @@ import type { Circle } from '../combat/Collision';
 import { BOX_HEIGHT, BOX_WIDTH, WALL_CONTACT_EPS } from '../tuning';
 import { WALLS } from './Box';
 import { EventBus } from './EventBus';
+import type { ActiveAbility } from '../abilities/Ability';
 
 /**
  * A non-damaging object inside the box (e.g. Prism's refraction prism).
@@ -32,6 +33,8 @@ export class World {
   readonly pool = new BulletPool();
   readonly bus = new EventBus();
   readonly props: Prop[] = [];
+  /** The equipped active ability (from the loadout), or null. */
+  ability: ActiveAbility | null = null;
   /** Simulated seconds. */
   time = 0;
   steps = 0;
@@ -72,7 +75,16 @@ export class World {
       }
     }
     // 2. Soul. Clamping every step means a moving wall pushes the soul inward; it can never be outside.
-    soul.move(input, dt, box);
+    // The active ability runs first; it may take over movement (dash).
+    const ab = this.ability;
+    if (ab && input.ability && soul.alive) {
+      const remaining = ab.remaining;
+      const r = ab.activate(this, input);
+      if (r === 'used') this.bus.emit('abilityUsed', { id: ab.id });
+      else if (r === 'notReady') this.bus.emit('abilityDenied', { id: ab.id, remaining });
+    }
+    const took = ab ? ab.step(this, input, dt) : false;
+    if (!took) soul.move(input, dt, box);
     box.clampLocal(soul.pos, soul.hitRadius);
     soul.tick(dt);
     pool.update(dt, box);

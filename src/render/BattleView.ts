@@ -14,7 +14,11 @@ import {
   HIT_SHAKE_INTENSITY,
   HIT_SHAKE_MS,
   IFRAME_BLINK_PERIOD,
+  DASH_DURATION,
+  DASH_TRAIL_FADE,
 } from '../tuning';
+import { Dash } from '../abilities/actives/Dash';
+import { STEP } from '../core/Clock';
 
 const GHOSTS = 256;
 /** Wall -> indices into the box corner list [TL, TR, BR, BL]. */
@@ -137,6 +141,7 @@ export class BattleView {
    */
   draw(realDt: number, alpha = 1): void {
     const { soul, pool } = this.world;
+    this.clockS += realDt;
     const t = this.showHitboxes ? 1 : Math.min(1, Math.max(0, alpha));
     const box = this.frame.set(this.world.box, t);
     const hw = box.halfWidth;
@@ -153,7 +158,7 @@ export class BattleView {
     g.fillStyle(theme.boxFill, 1);
     this.path(g, 4);
     g.fillPath();
-    // Walls: safe = thin white; damaging = thick amber (normal) or magenta (KR). Never red.
+    // Walls: safe = thin white; damaging = thick lime (normal) or magenta (KR). Never red.
     for (const [wall, a, b] of WALL_EDGES) {
       const ws = this.world.box.walls[wall];
       const p0 = this.w[a]!;
@@ -198,7 +203,9 @@ export class BattleView {
     // Soul: solid circle, drawn radius == hit radius. Blinks during i-frames.
     const sg = this.soulGfx;
     sg.clear();
-    const sw = box.toWorld(lerpPoint(soul.prev.x, soul.prev.y, soul.pos.x, soul.pos.y, t, this.tmp2), this.tmp);
+    const sl = lerpPoint(soul.prev.x, soul.prev.y, soul.pos.x, soul.pos.y, t, this.tmp2);
+    this.drawTrail(sg, sl, t);
+    const sw = box.toWorld(sl, this.tmp);
     const blinkOff = soul.invulnerable && Math.floor(soul.iframes / IFRAME_BLINK_PERIOD) % 2 === 0;
     if (soul.alive && !blinkOff) {
       sg.fillStyle(theme.soul, 1);
@@ -217,6 +224,30 @@ export class BattleView {
 
     this.drawOverlay();
     this.drawHud();
+  }
+
+  /**
+   * Dash trail: a short row of translucent soul-colored circles from the dash start to the soul,
+   * shrinking toward the start, fading out after the dash. Visual only.
+   */
+  private drawTrail(g: Phaser.GameObjects.Graphics, soulLocal: Vec2, t: number): void {
+    const ab = this.world.ability;
+    if (!(ab instanceof Dash)) return;
+    // Age at the drawn moment (the sim is up to one step ahead).
+    const age = ab.age - (1 - t) * STEP;
+    if (age < 0 || age > DASH_DURATION + DASH_TRAIL_FADE) return;
+    const fade = age <= DASH_DURATION ? 1 : 1 - (age - DASH_DURATION) / DASH_TRAIL_FADE;
+    const r = this.world.soul.hitRadius;
+    const N = 6;
+    const p = this.pts[0]!;
+    for (let i = 0; i < N; i++) {
+      const k = i / N;
+      p.x = ab.from.x + (soulLocal.x - ab.from.x) * k;
+      p.y = ab.from.y + (soulLocal.y - ab.from.y) * k;
+      const w = this.frame.toWorld(p, this.w[0]);
+      g.fillStyle(theme.soul, 0.35 * fade * (0.3 + 0.7 * k));
+      g.fillCircle(w.x, w.y, r * (0.45 + 0.55 * k));
+    }
   }
 
   /** Dev: outline every collision shape, computed through the collision geometry. */
@@ -249,6 +280,16 @@ export class BattleView {
     return { x: Math.round(d.x - w / 2), y: Math.round(d.y + d.height / 2 + px(24)), w, h: 6 };
   }
 
+  /** Ability bar rect: same height as the HP bar, to its right past the HP value. */
+  get abilityBar(): { x: number; y: number; w: number; h: number } {
+    const hp = this.hpBar;
+    return { x: hp.x + hp.w + 150, y: hp.y, w: px(60), h: hp.h };
+  }
+
+  /** Real time of the last denied press (s); the bar flashes briefly after it. */
+  deniedAt = -Infinity;
+  private clockS = 0;
+
   /** Thin HP bar (canvas). Its text lives in the HTML layer. */
   private drawHud(): void {
     const { soul } = this.world;
@@ -265,5 +306,21 @@ export class BattleView {
       g.fillStyle(theme.kr, 1);
       g.fillRect(bx + (hp - soul.kr) * k, by, soul.kr * k, barH);
     }
+    // Ability bar, built only from the ActiveAbility interface: fills as the cooldown recovers,
+    // bright when ready; a denied press flashes the empty part briefly.
+    const ab = this.world.ability;
+    if (!ab) return;
+    const a = this.abilityBar;
+    const frac = ab.cooldown > 0 ? 1 - ab.remaining / ab.cooldown : 1;
+    const denied = this.clockS - this.deniedAt < 0.18;
+    g.fillStyle(denied ? theme.textDim : theme.hpEmpty, 1);
+    g.fillRect(a.x, a.y, a.w, a.h);
+    g.fillStyle(ab.ready ? theme.abilityReady : theme.abilityCharging, 1);
+    g.fillRect(a.x, a.y, a.w * frac, a.h);
+  }
+
+  /** Real-time clock for HUD feedback (advanced by draw). */
+  get now(): number {
+    return this.clockS;
   }
 }

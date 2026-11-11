@@ -72,15 +72,39 @@ describe('projectile type rules', () => {
     expect(w.soul.hp).toBe(w.soul.maxHp);
   });
 
-  it('pressing into a wall counts as still (orange hurts, blue passes)', () => {
-    for (const [kind, hurts] of [['orange', true], ['blue', false]] as const) {
+  it('holding a direction into a wall counts as moving (blue hurts, orange passes)', () => {
+    for (const [kind, hurts] of [['orange', false], ['blue', true]] as const) {
       const w = new World(640, 360);
       w.soul.pos.x = w.box.halfWidth - w.soul.hitRadius; // already against the right wall
       w.pool.spawn({ shape: 'circle', x: w.soul.pos.x, y: 0, a: 40, damage: 10, kind, noPop: true });
+      const x0 = w.soul.pos.x;
       w.step(RIGHT, STEP);
-      expect(w.soul.moving).toBe(false);
+      expect(w.soul.pos.x).toBe(x0); // didn't actually move
+      expect(w.soul.moving).toBe(true);
       expect(w.soul.hp < w.soul.maxHp).toBe(hurts);
     }
+  });
+
+  it('opposite keys cancel (still), and riding the box is still', () => {
+    const w = setup('blue');
+    w.step({ dx: 0, dy: 0, slow: true }, STEP);
+    expect(w.soul.moving).toBe(false);
+    w.box.moveTo(700, 360, 0.2, 'linear');
+    for (let i = 0; i < 6; i++) w.step(STILL, STEP);
+    expect(w.soul.moving).toBe(false);
+    expect(w.soul.hp).toBe(w.soul.maxHp);
+  });
+
+  it('a dash counts as moving for its whole duration, even after the key is released', async () => {
+    const { Dash } = await import('../abilities/actives/Dash');
+    const w = new World(640, 360);
+    w.ability = new Dash();
+    w.step({ ...RIGHT, ability: true }, STEP);
+    expect(w.soul.moving).toBe(true);
+    w.step(STILL, STEP);
+    expect(w.soul.moving).toBe(true);
+    for (let i = 0; i < 20; i++) w.step(STILL, STEP);
+    expect(w.soul.moving).toBe(false);
   });
 
   it('kr goes to the KR pool through Soul.damage', () => {

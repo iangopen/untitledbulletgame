@@ -44,6 +44,10 @@ async function boot(): Promise<void> {
     scene: [MenuScene, RosterScene, BattleScene, ResultsScene, SettingsScene],
   });
   installResize(game);
+  // Space (slow) and the arrows must never scroll the page, whichever scene has the keyboard.
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' || e.key.startsWith('Arrow')) e.preventDefault();
+  });
   // F3 performance overlay, in every build.
   perfOverlay.install(game);
   // Frame-rate limit + display refresh measurement (skips whole display ticks; never touches the sim).

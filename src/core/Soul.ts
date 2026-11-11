@@ -20,6 +20,8 @@ export interface MoveInput {
   dx: number;
   dy: number;
   slow: boolean;
+  /** The active-ability key (Shift) was pressed; true for one step per press. */
+  ability?: boolean;
 }
 
 export type DamageResult = 'applied' | 'blocked' | 'dead';
@@ -49,9 +51,9 @@ export class Soul {
   /** Seconds of invulnerability remaining. */
   iframes = 0;
   /**
-   * Whether the soul moved under player input in the current step (set by move()). Pressing into a
-   * wall without moving counts as still; being carried by the box doesn't count as moving.
-   * Blue/orange projectiles read this (combat/projectile.ts).
+   * Whether the soul counts as moving in the current step: a direction is held (set by move(),
+   * even when pressing into a wall), or a dash is running (set by the ability). Being carried by
+   * the box doesn't count. Blue/orange projectiles read this (combat/projectile.ts).
    */
   moving = false;
 
@@ -70,9 +72,9 @@ export class Soul {
   move(input: MoveInput, dt: number, box: Box): void {
     this.moving = false;
     if (!this.alive) return;
-    const x0 = this.pos.x;
-    const y0 = this.pos.y;
     let { dx, dy } = input;
+    // Holding a direction counts as moving, so blue can't be ignored by hugging a wall.
+    this.moving = dx !== 0 || dy !== 0;
     if (dx !== 0 && dy !== 0) {
       // Diagonals move at the same speed as straight lines.
       dx *= Math.SQRT1_2;
@@ -83,7 +85,6 @@ export class Soul {
     this.pos.x += d.x * speed * dt;
     this.pos.y += d.y * speed * dt;
     box.clampLocal(this.pos, this.hitRadius);
-    this.moving = Math.abs(this.pos.x - x0) > 1e-9 || Math.abs(this.pos.y - y0) > 1e-9;
   }
 
   /** Advance timers and KR drain by one fixed step. */

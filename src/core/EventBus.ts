@@ -27,6 +27,10 @@ export interface GameEvents {
   wallStateChanged: { wall: Wall; damaging: boolean; damage: number; type: DamageType };
   /** A damaging wall touched the soul and the damage applied (not blocked by i-frames). */
   wallHit: { wall: Wall; damage: number; type: DamageType };
+  /** The equipped active ability was used (Shift). */
+  abilityUsed: { id: string };
+  /** Shift was pressed while the active ability was still recharging (nothing happened). */
+  abilityDenied: { id: string; remaining: number };
 }
 
 export type EventName = keyof GameEvents;

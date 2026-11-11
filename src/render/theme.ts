@@ -28,8 +28,14 @@ export const theme = {
   prism: 0x3de8ff,
   /** Non-damaging props (e.g. refraction prism) draw as translucent fill + outline. */
   propFillAlpha: 0.18,
-  /** Damaging wall (normal damage). Amber: distinct from white walls, never red. KR walls use `kr`. */
-  wallDamaging: 0xffb020,
+  /**
+   * Damaging wall (normal damage). Lime: far from every projectile color (white, blue, orange,
+   * magenta) and never red. KR walls use `kr`.
+   */
+  wallDamaging: 0x9dff3a,
+  /** Ability bar: recharging fill (dim) and ready fill (bright). */
+  abilityCharging: 0x5a5a6c,
+  abilityReady: 0xf4f4f8,
   /** UI */
   locked: 0x2e2e3a,
   rule: 0x22222c,
