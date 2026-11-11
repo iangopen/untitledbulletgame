@@ -19,3 +19,7 @@ Browser screenshots time out while the Phaser loop is asleep; wake it with a fro
 Director, TimerMode, interactions hub, plain-data roster; Menu, Roster, Battle HUD/pause, Results; ?roster= shortcut replaces ?prism=; dev-only ?duration=.
 Fixed during browser check: nudge() killed a running pop tween and left a roster card stuck at 1.04 scale; nudge now restores scale. Pause overlay hint overlapped the HP bar; moved up.
 Each commit verified to build on its own (rule added to CLAUDE.md).
+
+## 2026-11-11 - Phase 5 "Dynamic box"
+Box tracks (size/position/rotation) on the fixed step, squeeze with anchor and content shift, min size clamp, damaging walls via Soul.damage, box/wall events, DebugScene box controls.
+Gotcha: editing a CRLF file with Python str.replace silently missed multi-line matches, and writing with the default Windows encoding turned a new degree sign into a lone cp1252 byte. Use the Edit tool, or open files with encoding='utf-8' and normalise newlines.

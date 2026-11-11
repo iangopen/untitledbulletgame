@@ -21,8 +21,18 @@ Keyboard-only bullet-hell. The player dodges as a soul inside a box (Undertale-s
 - `npm test`: Vitest
 
 ## Architecture rules
-1. Characters never import or reference each other. They communicate only through typed events on `core/EventBus.ts` (one bus per World, `world.bus`). Every event and its payload is declared in `GameEvents` there; add new events to that interface, never use untyped strings. Handlers run synchronously on emit. Combos live only in `director/interactions.ts`, so adding a character never edits existing ones.
+1. Characters never import or reference each other. They communicate only through typed events on `core/EventBus.ts` (one bus per World, `world.bus`). Events so far: `beamFired`, `beamHitWall`, `beamRefracted` (Prism), and `boxResized`, `boxMoved`, `boxRotated` (on each request, with target and duration), `wallStateChanged`, `wallHit` (Box/World). Every event and its payload is declared in `GameEvents` there; add new events to that interface, never use untyped strings. Handlers run synchronously on emit. Combos live only in `director/interactions.ts`, so adding a character never edits existing ones.
 2. The Box is the coordinate frame. Bullets store box-local positions; `Box.toWorld` / `toLocal` convert. Moving, resizing or rotating the box transforms everything inside it.
+   Box API (`core/Box.ts`; all motion advances in `box.step(dt)` on the fixed step, never Phaser tweens, so it is frame-rate independent and freezes on pause):
+   - `resizeTo(w, h, duration, ease, anchor = 'center' | wall)`, `squeezeWall(wall, amount, duration, ease)` (the opposite wall stays fixed), `moveTo(x, y, duration, ease)`, `rotateTo(rad, duration, ease)`, `rotateBy(delta, ...)`, `setWall(wall, { damaging, damage, type })`, `reset()`, plus `state`, `defaults`, `walls`, `moving`, `distanceToWall`, `dirToLocal`.
+   - Easings are monotonic only (`linear`, `quadIn`, `quadOut`, `quadInOut`, `cubicOut`, `sineInOut`), so a tween never overshoots its clamped target.
+   - Minimum size `BOX_MIN_WIDTH`/`BOX_MIN_HEIGHT` (60x60, tuning.ts). Every resize and squeeze is clamped to it.
+   - **Arbitration rule (for Phase 6 combos):** size, position and rotation are three independent tracks that run at the same time. A new request on a track replaces the running one, starting from that track's current value (no snapping). Position applies as a per-step delta, so it composes with the center motion of anchored resizes.
+   - Anchored resizes report `box.contentShift`; World applies it to the soul and bullets so a squeeze doesn't drag things the wall hasn't reached.
+   - **Soul-in-box defaults (Ian may change):** the soul lives in box-local space and rides with the box when it moves or rotates. Controls are screen-relative (input is rotated into box space). Every step the soul is clamped to the interior, so a moving wall pushes it inward and it can never be outside, even after an instant squeeze.
+   - Damaging walls: contact means the soul is within `WALL_CONTACT_EPS` (0.5 px) of being pressed against a damaging wall. Contact goes through `soul.damage`, so i-frames and KR apply as usual. Drawn thick amber (`theme.wallDamaging`), or magenta when the wall deals KR. Never red.
+   - Bullet wall hooks are checked in box-local space against the current size, so they fire where the wall really is while it moves, rotates or resizes. A shrinking wall that sweeps past a bullet also counts as a crossing.
+   - Each battle builds a new World, so the box starts at its defaults on every battle and retry.
 3. Characters are config plus a small class. `<name>.config.ts` maps level bands to attacks, damage, speed, frequency. The class only holds behavior the config can't express. Level 0 = inactive.
    Config format (`characters/config.ts`):
    - `bands: [{ from, to, attacks: { <attackId>: { <param>: [atBandStart, atBandEnd] } } }]`, covering 1..maxLevel with no gaps.
@@ -113,11 +123,19 @@ Live: https://iangopen.github.io/untitledbulletgame/ (full loop: menu → roster
 - Tests: 102 Vitest cases. New ones cover the Director (level-0 characters not created or ticked, win on timeout, loss on death with time survived, freeze after the outcome, roster copied), TimerMode (edges, death beats the timer, clock format), interactions install/dispose, and roster parsing.
 - Browser-verified: menu (Wave mode can't be chosen and just nudges), roster (Prism 1→12 with ↑, ↓ works, clamps at 0 and 20, X/Z set all, locked slots stay 0), battle HUD countdown, pause freezing time and bullets with no catch-up on resume, quit to roster keeping levels, loss (DOWN, 0:03.3, 0/100, Prism 12), win with dev `?duration=6` (SURVIVED, 0:06.0, 94/100, Prism 5), retry starting fresh (100 HP, 0 KR, 0 bullets, outcome cleared, same roster), and the `?roster=` shortcut. No console errors.
 
+**Phase 5 (Dynamic box):**
+- Box API as described under rule 2. Damaging walls, the `wallHit` event, the box events, per-wall rendering, and the HUD anchored to the default box position. DebugScene box keys: Q/E rotate ±30°, R +90°, T +180°, F resize, G move, V fast squeeze left, B slow squeeze right, N cycle wall states, M continuous motion, P Prism 0/20, Z reset; the readout shows box size, position, rotation and wall states.
+- Tests: 125 Vitest cases. New ones cover rotation round-trips, `dirToLocal`, simultaneous tracks, replace-from-current, `rotateBy` accumulation, the min-size clamp, squeezes keeping the opposite wall world-fixed even when rotated, reset, events, soul push-in (slow, and instant to min size), world-fixed contents during a squeeze, riding the box, screen-relative controls, damaging walls (once, then i-frames; KR goes to the pool), and wall hooks in a rotated, resized box.
+- Browser-verified in DebugScene: resized and 30°-rotated boxes with bullets, and amber/KR damaging walls. Slow squeeze: the soul pressed at x=144 was pushed to x=104 and never got closer than 6.0 px (its radius) to the wall. Fast squeeze (80 px in 0.12 s): the wall went from world x 170 to 250 and the soul from 220 to 256, never closer than 6.0 px. Instant 2000 px squeeze clamped to width 60 with the soul inside. A damaging wall hit at t=5.88 and t=6.88 (i-frames blocked 105 contacts in between). Prism 20 with the box spinning through 782° and breathing between widths 208 and 300 for 40 s: 244 wall events, all 0 to 3.25 px past the real wall (at most one step of travel), 23 splits; peak 43 bullets; frame median 0.3 ms, p99 2.9 ms, 2/2400 frames over 16.7 ms (same rare render-side spikes as before). Pause froze box motion for 3 s; resume continued without a jump; retry restored the default box and safe walls.
+- Normal play is unchanged: no character moves the box yet.
+
 ### Open
 - Rare render-side frame spikes (see above): profile in a normal (non-automated) browser before adding more characters.
 - Graphics redraws every path each frame (~13 ms/frame at 900 bullets in the Phase 2 stress test); fine at Prism's ~45.
 - Prism numbers are first guesses; tune by feel. Open design calls: prism harmless?, refracted beams split?, prism relocation rate.
 - KR rules (i-frames on KR hits, non-lethal), Ian deciding; Prism deals no KR.
+- No character uses the dynamic box yet (Phase 6). The defaults to confirm: soul rides the box, controls screen-relative, wall damage 5 per contact, min box 60x60
+- Box events fire on request (target + duration), not on completion; add completion events if combos need them
 - Wave mode (Phase 7): the menu shows it as coming soon; it needs a `BattleMode` that also loads waves
 - Scoring; results show time, HP and levels only
 - In-battle level changes for tuning were dropped with the [ ] keys; use the roster screen or `?roster=`
