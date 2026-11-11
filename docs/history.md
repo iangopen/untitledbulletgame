@@ -27,3 +27,8 @@ Gotcha: editing a CRLF file with Python str.replace silently missed multi-line m
 ## 2026-11-11 - Visual pass
 1280x720 view at device resolution, WORLD_SCALE 1.5 gameplay scaling, Inter + JetBrains Mono self-hosted, minimal restyle of every screen.
 Found: #game flex centering plus Phaser CENTER_BOTH double-centered the canvas (the "roster off-center" complaint). Resize handler moved from rAF to a timer debounce plus ResizeObserver plus scale.refresh(), because container resizes don't trigger Phaser's refit.
+
+## 2026-11-11 - Smooth motion
+F3 performance overlay (every build), render interpolation (snapshot at step start, blend by clock.alpha, snap on jumps/flips, alpha 1 with the hitbox overlay).
+Measured before changing: draw cost was ~1 ms/frame even at 2520x1418 with Prism 20, so the sprite rewrite and resolution cap were skipped; judder came from 0/1 steps per frame at 120/144 Hz with no interpolation.
+The automation browser throttles rAF (~13/s) even in a visible tab, and awaiting inside a JS tool call stalls frames further; benchmark by calling game.step() synchronously with gl.readPixels to sync the GPU.

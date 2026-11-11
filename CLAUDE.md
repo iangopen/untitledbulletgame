@@ -60,6 +60,12 @@ Keyboard-only bullet-hell. The player dodges as a soul inside a box (Undertale-s
     - Gameplay sizes are separate from UI sizes: `tuning.ts` writes every gameplay distance, size and speed as `px(original)` with `WORLD_SCALE = 1.5` (720/480), so the game feels exactly as it did at 640x480.
 12. Red belongs to the player (solid red circle). Hazards never use red. Generic bullets are white; KR is magenta.
 13. Characters customise bullets through `onStep`/`onWall` hooks and compose `combat/patterns/` (line, fan, ring, aimed), not through Bullet subclasses or hand-written spawn loops.
+14. Render interpolation: logic and collision use the simulated state; drawing uses the interpolated state. `World.step` first calls `world.snapshot()` (box, soul and every active bullet record `prev`/`px,py,prot`), and `BattleView.draw(realDt, alpha)` blends prev -> current by `clock.alpha` (leftover step fraction) through `render/interp.ts` (`BoxFrame`, `lerpPoint`, `lerpAngle`). Never read `prev` in game logic. Spawns and resets start with prev == current; a jump over `SNAP_DISTANCE` or a turn over `SNAP_ANGLE` in one step draws at the current state (teleports, bounces). Pause holds alpha still (no jump); a frozen battle re-snapshots so it draws its final state. The hitbox overlay forces alpha 1, so with it on, drawn shapes are bit-identical to collision shapes. New moving things must add their state to `snapshot()` and draw through the blend. Never change game speed with rAF tricks: game time comes only from the fixed step.
+
+## Rendering and performance
+- Drawing is Phaser Graphics (WebGL) rebuilt each frame: box, bullets (geometry-masked to the box), soul, overlay, HP bar. Measured cheap: about 1 ms median per frame including GPU work at Prism 20 on a 2520x1418 canvas, so it was kept rather than moved to pooled sprites, and there's no render-resolution cap. Revisit if a character pushes bullet counts into the hundreds (the Phase 2 stress test showed ~13 ms at 900 bullets).
+- F3 toggles the performance overlay in every build (`ui/PerfOverlay.ts`, stats in `render/frameStats.ts`): fps, display frame interval, steps per frame, CPU frame time (median/p99/max) with a 120-frame graph (guides at 8.3 and 16.7 ms), dropped frames (interval over 1.5x median), bullets, devicePixelRatio. `window.__perf` exposes it. Frame time is CPU-side; GPU stalls show as longer intervals.
+- Benchmark method (the automation browser throttles rAF to ~13/s): sleep `game.loop`, then call `game.step()` in a tight loop with `__battle.loop.last` set one step back (one sim step per frame) and `gl.readPixels` of 1 px after each frame to include GPU time.
 
 ## Pixel ratio and HTML UI layer
 - Pixel-ratio rule: the canvas backing store is always displayed CSS size x devicePixelRatio (`render/display.ts`); re-fit on window resize, host resize and ratio changes (matchMedia). The camera maps the 1280x720 layout onto it. Dev-only `?dpr=1.5` fakes the ratio for testing.
@@ -74,6 +80,7 @@ Dev shortcuts:
 - `?roster=prism:12` (comma-separated `id:level`, clamped, unknown ids ignored) skips the menu straight into battle. It applies once per page load and works in production too.
 - `?duration=<s>` shortens timer mode. Dev builds only; it's stripped from production.
 - In dev: H toggles the hitbox overlay; backtick opens DebugScene.
+- Every build: F3 toggles the performance overlay.
 
 ## Folder layout
 ```
@@ -148,12 +155,25 @@ Live: https://iangopen.github.io/untitledbulletgame/ (full loop: menu → roster
 
 **HTML UI + pixel ratio:** diagnosed the backing store was already CSS x DPR (1680x945 / 2100x1181 / 2520x1418 at 1 / 1.25 / 1.5); the blur was Phaser text textures resampled at fractional positions. UI moved to DOM; mouse and keyboard loops verified locally; overlay aligned exactly at ratios 1/1.25/1.5 and narrow/wide hosts; DebugScene rescaled by 1.5. Ratios were emulated (`?dpr=`), not real browser zoom.
 
+**Smooth motion (interpolation + F3 overlay):**
+- Diagnosis: draw cost was not the problem; missing interpolation was. Bench (1800 frames = 30 s of game time, one step per frame, GPU-synced, ms per frame; before -> after interpolation):
+  - Soul only, ratio 1 (1680x945): median 0.80 -> 0.60, p99 9.2 -> 2.6, frames over 16.7 ms 9 -> 2
+  - Prism 20, ratio 1: median 1.20 -> 1.80, p99 10.6 -> 7.0, over 16.7 ms 8 -> 6, peak 43 bullets
+  - Soul only, ratio 1.5 (2520x1418): median 1.30 -> 0.90, p99 5.8 -> 8.6, over 16.7 ms 7 -> 9
+  - Prism 20, ratio 1.5: median 1.10 -> 1.20, p99 5.2 -> 4.6, over 16.7 ms 5 -> 5
+  The differences are run-to-run noise; spikes (24-45 ms) happen with zero bullets too, so they're browser pauses, not drawing. Headroom: about 1-2 ms of an 8.3 ms (120 Hz) budget.
+- Pacing (pure test with the real Clock and World): steps per frame at 60 Hz are always 1; at 120 Hz 0 or 1 (50/50); at 144 Hz 0:41 and 1:29 of 70 frames. Without interpolation the soul drew 0 or 4.25 px per frame at 120/144 Hz (the judder); with it, exactly 2.125 px (120 Hz) and 1.771 px (144 Hz) every frame, and proportional to real time under +-1 ms jitter.
+- In the browser with 144 Hz frame pacing: the drawn soul advanced exactly 1.771 px per frame; pause held it still for 3 frames and resume continued with the same spacing (no jump); retry starts with a new world, alpha 0 and prev == current; 364 spawns at Prism 20 (with splits and refractions) all drew at their spawn state. Paused with H on: the interpolated box frame equals the simulated box exactly, and the soul outline sits on the soul. No console errors.
+- Tests: 139 (stats ring buffer, pacing at 60/120/144 Hz and with jitter, no smearing on spawn/teleport/flip/reset, bit-exact at alpha 1, identical simulation with or without snapshots). All earlier hitbox tests still pass.
+
 ### Open
-- Confirm sharpness on Ian's real Windows 125/150% display (only emulated here); live-site check of this session not done
+- Vsync-paced numbers on a real 120/144 Hz display were not measured: the automation browser throttles rAF to ~13/s. Ian should check with F3 on his laptop (expect steps/frame about 50% 0 and 50% 1 at 120 Hz, and frame ms well under 8 ms).
+- Ratio 1.5 was emulated with `?dpr=` (dev only), not real browser zoom; at an emulated ratio on a 1x screen the 1-device-pixel hitbox hairline is too faint to inspect in screenshots, so overlay alignment is shown numerically.
+- Confirm sharpness on Ian's real Windows 125/150% display (only emulated here)
 - Real browser-window resizing wasn't tested (the automation window wouldn't resize); container resizing was
-- DebugScene pattern speeds/sizes are still unscaled dev values
-- Rare render-side frame spikes (see above): profile in a normal (non-automated) browser before adding more characters.
-- Graphics redraws every path each frame (~13 ms/frame at 900 bullets in the Phase 2 stress test); fine at Prism's ~45.
+- Rare 25-45 ms frame spikes (with or without bullets): browser/GC pauses in the automated browser; profile in a normal browser if F3 shows them on Ian's machine.
+- DebugScene draws without interpolation (alpha 1); fine for a dev tool.
+- Despawn ghosts and props (the refraction prism) aren't interpolated: ghosts are static and the prism only teleports.
 - Prism numbers are first guesses; tune by feel. Open design calls: prism harmless?, refracted beams split?, prism relocation rate.
 - KR rules (i-frames on KR hits, non-lethal), Ian deciding; Prism deals no KR.
 - No character uses the dynamic box yet (Phase 6). The defaults to confirm: soul rides the box, controls screen-relative, wall damage 5 per contact, min box 60x60
