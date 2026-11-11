@@ -20,6 +20,8 @@ export const theme = {
   prism: 0x3de8ff,
   /** Non-damaging props (e.g. refraction prism) draw as translucent fill + outline. */
   propFillAlpha: 0.18,
+  /** Damaging wall (normal damage). Amber: distinct from white walls, never red. KR walls use `kr`. */
+  wallDamaging: 0xffb020,
   /** UI */
   locked: 0x3a3a4a,
   panel: 0x111119,

@@ -1,11 +1,12 @@
 import Phaser from 'phaser';
 import type { World } from '../core/World';
-import type { Vec2 } from '../core/Box';
+import type { Vec2, Wall } from '../core/Box';
 import { Bullet, bulletCircle, bulletRect, bulletTriangle, rectCorners } from '../combat/Bullet';
 import type { Circle, Rect, Triangle } from '../combat/Collision';
 import { rgb, theme, toCss } from './theme';
 import {
   BOX_BORDER,
+  DAMAGING_WALL_WIDTH,
   DESPAWN_FADE_TIME,
   HIT_FLASH_MS,
   HIT_SHAKE_INTENSITY,
@@ -14,6 +15,13 @@ import {
 } from '../tuning';
 
 const GHOSTS = 256;
+/** Wall -> indices into the box corner list [TL, TR, BR, BL]. */
+const WALL_EDGES: readonly [Wall, number, number][] = [
+  ['top', 0, 1],
+  ['right', 1, 2],
+  ['bottom', 2, 3],
+  ['left', 3, 0],
+];
 
 /**
  * Draws a World with Phaser Graphics: flat solid shapes, crisp edges, no textures.
@@ -140,9 +148,18 @@ export class BattleView {
     g.fillStyle(theme.boxFill, 1);
     this.path(g, 4);
     g.fillPath();
-    g.lineStyle(BOX_BORDER, theme.boxBorder, 1);
-    this.path(g, 4);
-    g.strokePath();
+    // Walls: safe = thin white; damaging = thick amber (normal) or magenta (KR). Never red.
+    for (const [wall, a, b] of WALL_EDGES) {
+      const ws = box.walls[wall];
+      const p0 = this.w[a]!;
+      const p1 = this.w[b]!;
+      if (ws.damaging) {
+        g.lineStyle(DAMAGING_WALL_WIDTH, ws.type === 'kr' ? theme.kr : theme.wallDamaging, 1);
+      } else {
+        g.lineStyle(BOX_BORDER, theme.boxBorder, 1);
+      }
+      g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+    }
     this.maskGfx.clear();
     this.maskGfx.fillStyle(0xffffff, 1);
     this.path(this.maskGfx, 4);
@@ -225,8 +242,10 @@ export class BattleView {
     const { box, soul } = this.world;
     const barW = 160;
     const barH = 12;
-    const bx = box.x - barW / 2;
-    const by = box.y + box.halfHeight + 22;
+    // HUD is anchored to the default box so it stays put while the box moves.
+    const d = box.defaults;
+    const bx = d.x - barW / 2;
+    const by = d.y + d.height / 2 + 22;
     const hp = Math.max(0, soul.hp);
     const px = barW / soul.maxHp;
     const g = this.hudGfx;
