@@ -48,6 +48,20 @@ async function boot(): Promise<void> {
   perfOverlay.install(game);
   // Frame-rate limit + display refresh measurement (skips whole display ticks; never touches the sim).
   frameLimiter.install(game);
+  // Phaser processes its whole keyboard queue on every DOM key event but only empties it once per
+  // game step, so two presses inside one drawn frame replay the first (common under a frame cap).
+  // Its window listeners are added at boot, before 'ready'; ours run after them and drop the
+  // already-processed events. Key states (isDown) were updated synchronously, so nothing is lost.
+  game.events.once('ready', () => {
+    // `queue` is internal to Phaser's KeyboardManager (not in its typings).
+    const kb = game.input.keyboard as unknown as { queue: KeyboardEvent[] } | null;
+    if (!kb) return;
+    const drop = () => {
+      kb.queue.length = 0;
+    };
+    window.addEventListener('keydown', drop);
+    window.addEventListener('keyup', drop);
+  });
   // Settings apply live: quality refits the canvas now; Show FPS pins the overlay.
   perfOverlay.setVisible(settings.current.showFps);
   settings.onChange((s, changed) => {
