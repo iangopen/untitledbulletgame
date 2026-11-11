@@ -47,6 +47,12 @@ export interface BulletSpec {
   onWall?: WallHook;
   /** Skip the spawn pop (e.g. split children continuing a beam). */
   noPop?: boolean;
+  /** Generation for splitting attacks (0 = original). Owners decide what it means. */
+  gen?: number;
+  /** Owner-defined bit flags (e.g. "already refracted"). */
+  flags?: number;
+  /** Fill color; 0 = theme default for its damage type. KR always draws magenta. */
+  color?: number;
 }
 
 export class Bullet {
@@ -69,6 +75,9 @@ export class Bullet {
   onStep: StepHook | undefined = undefined;
   onWall: WallHook | undefined = undefined;
   noPop = false;
+  gen = 0;
+  flags = 0;
+  color = 0;
 
   init(s: BulletSpec): this {
     this.active = true;
@@ -90,6 +99,9 @@ export class Bullet {
     this.onStep = s.onStep;
     this.onWall = s.onWall;
     this.noPop = s.noPop ?? false;
+    this.gen = s.gen ?? 0;
+    this.flags = s.flags ?? 0;
+    this.color = s.color ?? 0;
     return this;
   }
 

@@ -4,6 +4,21 @@ import { BulletPool } from '../combat/BulletPool';
 import { bulletHitsCircle } from '../combat/hitTest';
 import type { Circle } from '../combat/Collision';
 import { BOX_HEIGHT, BOX_WIDTH } from '../tuning';
+import { EventBus } from './EventBus';
+
+/**
+ * A non-damaging object inside the box (e.g. Prism's refraction prism).
+ * Box-local, drawn translucent so it never reads as a hazard.
+ */
+export interface Prop {
+  shape: 'triangle';
+  x: number;
+  y: number;
+  /** Circumradius. */
+  r: number;
+  rotation: number;
+  color: number;
+}
 
 /**
  * Pure battle simulation for one fixed step: soul, box, bullets, hits.
@@ -13,6 +28,8 @@ export class World {
   readonly box: Box;
   readonly soul = new Soul();
   readonly pool = new BulletPool();
+  readonly bus = new EventBus();
+  readonly props: Prop[] = [];
   /** Simulated seconds. */
   time = 0;
   steps = 0;
