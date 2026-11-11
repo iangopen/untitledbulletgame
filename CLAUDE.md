@@ -65,7 +65,17 @@ Keyboard-only bullet-hell. The player dodges as a soul inside a box (Undertale-s
 ## Rendering and performance
 - Drawing is Phaser Graphics (WebGL) rebuilt each frame: box, bullets (geometry-masked to the box), soul, overlay, HP bar. Measured cheap: about 1 ms median per frame including GPU work at Prism 20 on a 2520x1418 canvas, so it was kept rather than moved to pooled sprites, and there's no render-resolution cap. Revisit if a character pushes bullet counts into the hundreds (the Phase 2 stress test showed ~13 ms at 900 bullets).
 - F3 toggles the performance overlay in every build (`ui/PerfOverlay.ts`, stats in `render/frameStats.ts`): fps, display frame interval, steps per frame, CPU frame time (median/p99/max) with a 120-frame graph (guides at 8.3 and 16.7 ms), dropped frames (interval over 1.5x median), bullets, devicePixelRatio. `window.__perf` exposes it. Frame time is CPU-side; GPU stalls show as longer intervals.
-- Benchmark method (the automation browser throttles rAF to ~13/s): sleep `game.loop`, then call `game.step()` in a tight loop with `__battle.loop.last` set one step back (one sim step per frame) and `gl.readPixels` of 1 px after each frame to include GPU time.
+- Benchmark method (the automation browser throttles rAF to ~13/s): sleep `game.loop`, then call `game.step()` in a tight loop with `__battle.loop.last` set one step back (one sim step per frame) and `gl.readPixels` of 1 px after each frame to include GPU time. To test frame caps, call the wrapped `game.loop.callback(t, tickMs)` with busy-waited ticks instead (that goes through the limiter).
+
+## Settings
+15. **Settings never touch the simulation.** They only change how and how often the game is drawn (frame limit, render quality, overlay, screen effects). The fixed 60 Hz step, timing, difficulty and hitboxes are identical under every setting. Never read settings from game logic (`core/`, `combat/`, `characters/`, `director/`).
+- Data: `settings/settings.ts` (pure): `{ frameDivisor, quality, showFps, shake, flash }`. Stored in localStorage under its own key **`ubg.settings.v1`** as `{ v: 1, ... }`, separate from game progress (Phase 8 gets its own key). Missing, corrupt, wrong-version or invalid fields fall back to defaults field by field; every storage access is in try/catch. Defaults: match display, full, FPS off, shake on, flash on. A corrupt stored value is left alone until the next change overwrites it.
+- Live store: `settings/store.ts` `settings.current` / `set(patch)` / `reset()` / `onChange`. Every change saves immediately. `main.ts` refits the canvas on quality changes and pins the perf overlay on showFps. `window.__settings` exposes it in every build.
+- Refresh rate and frame limit: `render/frameLimiter.ts` wraps Phaser's loop callback (it intercepts `loop.start`, because Phaser emits `ready` before starting the loop). Every display tick feeds the refresh estimate: median interval, snapped to a common rate within 2% (`settings/refresh.ts`), 30-tick startup sample, then 120-tick windows. It updates on a >5% change seen in two windows in a row, re-samples on a pixel-ratio change (new screen), and ignores <30 Hz samples (throttling). Caps are refresh/N for N=1..4 while >= 30 fps (144 Hz: 144/72/48/36). The stored value is the divisor N, clamped to what the display offers. On a non-drawn tick the whole Phaser step (input, update, render) is skipped and its delta is carried to the next drawn tick, so Phaser timers keep real time. Draw gating uses the vsync rAF timestamp, not `performance.now()`: a draw happens once (N - 0.5) ticks have passed. FixedLoop still runs fixed steps from real time, so the sim stays at 60 steps/s and interpolation covers any cap.
+- Render quality: `qualityCap()` caps the ratio used by `display.ts` `computeScale` (full = devicePixelRatio, balanced = at most 1.5x CSS, performance = 1x). `refit(game)` applies it live and re-points cameras of running and paused scenes. The DOM UI is unaffected, so text stays sharp.
+- Screen effects: anything that shakes or flashes the screen calls `render/effects.ts` `shakeScreen` / `flashScreen`, the single gate for the shake and flash toggles. Never call `cam.shake` / `cam.flash` directly.
+- Screen: `scenes/SettingsScene.ts` (HTML layer). It opens from the menu (`go`, Back returns to the menu) or from pause, where Battle is `scene.pause()`d and Settings is launched over it (Settings is last in the scene list). Back resumes Battle, which re-shows its HUD and pause menu and stays paused. Rows: label, then ‹ value ›. ↑/↓ choose, ←/→ change, Enter steps or activates, Esc/Backspace back, hover selects, clicks on the row or arrows change values. A quiet line shows the measured refresh rate and canvas size.
+- Keyboard queue fix (`main.ts`): Phaser processes its whole keyboard queue on every DOM key event but only empties it once per game step, so two presses in one drawn frame replayed the first. A window listener added on `ready` (after Phaser's) empties it after each event.
 
 ## Pixel ratio and HTML UI layer
 - Pixel-ratio rule: the canvas backing store is always displayed CSS size x devicePixelRatio (`render/display.ts`); re-fit on window resize, host resize and ratio changes (matchMedia). The camera maps the 1280x720 layout onto it. Dev-only `?dpr=1.5` fakes the ratio for testing.
@@ -73,7 +83,7 @@ Keyboard-only bullet-hell. The player dodges as a soul inside a box (Undertale-s
 - Input rules: scenes own state; the DOM only renders and forwards input. Hover and keyboard share one selection index per screen. Mousedown and wheel are prevented on the overlay, so clicks never take focus or scroll the page. Locked items use a not-allowed cursor and ignore the mouse. Battle movement stays keyboard-only; a quiet "pause" button gives a mouse route.
 
 ## Scene flow
-`Menu` (Timer mode; Wave mode shown as coming soon) → `Roster` (5 UCN-style slots: Prism plus 4 locked placeholders; ←/→ pick a slot, ↑/↓ change level, Z sets all to 0, X sets all to 20, Enter fights, Esc returns to the menu; shows total difficulty) → `Battle` (Director + TimerMode; HUD shows the countdown, HP/KR bar and roster summary; Esc pauses: resume / restart / quit to roster) → `Results` (win/loss, time survived, HP left, levels; R or Enter retries the same roster, Esc goes to the roster with levels kept).
+`Menu` (Timer mode; Wave mode shown as coming soon; Settings) → `Roster` (5 UCN-style slots: Prism plus 4 locked placeholders; ←/→ pick a slot, ↑/↓ change level, Z sets all to 0, X sets all to 20, Enter fights, Esc returns to the menu; shows total difficulty) → `Battle` (Director + TimerMode; HUD shows the countdown, HP/KR bar and roster summary; Esc pauses: resume / settings / restart / quit to roster) → `Results` (win/loss, time survived, HP left, levels; R or Enter retries the same roster, Esc goes to the roster with levels kept).
 Transitions are 140 ms fades (`SCENE_FADE_MS`) via `scenes/ui.ts` `go()`/`enter()`, and every screen follows the visual rules (rule 11). Pause skips the fixed step and `FixedLoop.resync()` on resume, so no time is caught up.
 
 Dev shortcuts:
@@ -86,7 +96,8 @@ Dev shortcuts:
 ```
 src/
   main.ts
-  scenes/      Menu, Roster, Shop, Battle, Results
+  scenes/      Menu, Roster, Shop, Battle, Results, Settings
+  settings/    settings (data + storage), refresh (rates, caps), store (live)
   core/        Soul, Box, Clock, EventBus
   combat/      Bullet, BulletPool, Collision, patterns/
   characters/  Character (base), registry, <name>/ (class + config)
@@ -166,7 +177,20 @@ Live: https://iangopen.github.io/untitledbulletgame/ (full loop: menu → roster
 - In the browser with 144 Hz frame pacing: the drawn soul advanced exactly 1.771 px per frame; pause held it still for 3 frames and resume continued with the same spacing (no jump); retry starts with a new world, alpha 0 and prev == current; 364 spawns at Prism 20 (with splits and refractions) all drew at their spawn state. Paused with H on: the interpolated box frame equals the simulated box exactly, and the soul outline sits on the soul. No console errors.
 - Tests: 139 (stats ring buffer, pacing at 60/120/144 Hz and with jitter, no smearing on spawn/teleport/flip/reset, bit-exact at alpha 1, identical simulation with or without snapshots). All earlier hitbox tests still pass.
 
+**Settings:**
+- Tests: 163 (settings round-trip on its own key; missing, corrupt, wrong-version and invalid fields give defaults; throwing storage never throws; caps for 60/120/144/165 Hz = 60/30, 120/60/40/30, 144/72/48/36, 165/82.5/55/41.25; the rate estimate snaps jitter and rejects throttled samples; tick skipping draws every N ticks under +-1 ms jitter for every cap at those rates, and a missed tick draws on the next).
+- Frame caps in the browser (real game at Prism 20, the wrapped loop callback driven with busy-waited ticks at each rate, gaps across stalls of the throttled tab excluded): every remaining gap was exactly N ticks, the median draw interval equalled the ideal (16.67/33.33; 8.33/16.67/25.00/33.33; 6.94/13.89/20.83/27.78; 6.06/12.12/18.18/24.24 ms), and the sim ran 59.7-60.7 steps/s under every cap (variation = window edges). The limiter measured 60/120/144/165 from the ticks. One bug found and fixed: with `performance.now()` a late callback could move a draw by a tick; it now uses the rAF timestamp.
+- Render quality at emulated ratio 2 (CSS 1680x945): full 3360x1890, balanced 2520x1418, performance 1680x945, applied live (also with Battle paused underneath). Text is DOM and stays crisp.
+- Opened from the menu (click and keyboard) and from pause (keyboard). Every option changed with mouse and keyboard; Esc/Back from pause returns to the still-paused battle (sim did not advance, the Esc didn't leak into Battle); Back from the menu path returns to the menu. Reset to defaults works.
+- Persistence: settings survived a reload (balanced at ratio 2 started at 2520x1418, FPS overlay pinned); a truncated stored value started with defaults and no console errors.
+- Shake/flash on the next hit: off gave no shake and no flash, on gave both, shake-only gave just the shake.
+- Bug found: one DOM key event was handled up to 3 times (Phaser's keyboard queue); fixed and re-verified (8 presses = 8 handled events).
+
 ### Open
+- The real display refresh rate couldn't be checked here (the automation browser reports 55-80 Hz from throttled rAF). Ian: confirm the Settings screen shows your display's rate (e.g. 144 Hz) and that the caps pace smoothly.
+- If the measured rate is under 60 (e.g. a 50 Hz screen), only "match display" is offered when refresh/2 < 30.
+- Frame limit while the tab is throttled or in the background is whatever the browser gives; nothing to fix.
+- Keys pressed during the 140 ms scene fade go to the leaving scene (pre-existing; harmless so far).
 - Vsync-paced numbers on a real 120/144 Hz display were not measured: the automation browser throttles rAF to ~13/s. Ian should check with F3 on his laptop (expect steps/frame about 50% 0 and 50% 1 at 120 Hz, and frame ms well under 8 ms).
 - Ratio 1.5 was emulated with `?dpr=` (dev only), not real browser zoom; at an emulated ratio on a 1x screen the 1-device-pixel hitbox hairline is too faint to inspect in screenshots, so overlay alignment is shown numerically.
 - Confirm sharpness on Ian's real Windows 125/150% display (only emulated here)

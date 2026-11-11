@@ -32,3 +32,8 @@ Found: #game flex centering plus Phaser CENTER_BOTH double-centered the canvas (
 F3 performance overlay (every build), render interpolation (snapshot at step start, blend by clock.alpha, snap on jumps/flips, alpha 1 with the hitbox overlay).
 Measured before changing: draw cost was ~1 ms/frame even at 2520x1418 with Prism 20, so the sprite rewrite and resolution cap were skipped; judder came from 0/1 steps per frame at 120/144 Hz with no interpolation.
 The automation browser throttles rAF (~13/s) even in a visible tab, and awaiting inside a JS tool call stalls frames further; benchmark by calling game.step() synchronously with gl.readPixels to sync the GPU.
+
+## 2026-11-11 - Settings
+Settings screen (menu and pause), frame-rate caps as whole divisors of the measured refresh, render quality caps, Show FPS, shake/flash gate, versioned storage key ubg.settings.v1.
+Found: Phaser emits 'ready' before loop.start(), which replaces the loop callback; the limiter intercepts loop.start instead. Using performance.now() for draw gating let a late callback shift a draw by a tick; the rAF timestamp fixed it. Phaser's keyboard queue replays earlier presses within one step; it is now emptied after each DOM event.
+Process slip: a stash-based pre-commit check conflicted on a partially staged file and a bad commit landed locally (never pushed); undone with reset --soft. Verify staged trees by exporting the index (git checkout-index) to a scratch dir with a node_modules junction instead of stashing.
