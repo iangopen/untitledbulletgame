@@ -27,6 +27,10 @@ Keyboard-only bullet-hell. The player dodges as a soul inside a box (Undertale-s
 7. Collision, config lookup, damage, and scheduling are pure functions with unit tests. Phaser code only draws and reads input.
 8. Bullets come from `BulletPool`; never `new Bullet()` inside the game loop.
 9. Colors come from `render/theme.ts`. Each character owns one accent color; bullets must stay readable against the box at all levels.
+10. Exact hitboxes: what you see is what hits you. Every collision shape equals its drawn shape and size. Drawing and collision both derive from the same geometry functions in `combat/Bullet.ts` (`bulletCircle`/`bulletRect`/`bulletTriangle`), and the soul's drawn radius is its hit radius. Never add a separate "hitbox size". The spawn pop scales both together; despawn fades are visual-only ghosts that never collide.
+11. Visual style (in the spirit of Just Shapes & Beats): near-black background, flat bright solid shapes with crisp edges, no textures or images, thin clean box border. Motion is short and punchy: quick scale-pop on spawn, fast fade on despawn, brief flash and small shake when the soul is hit.
+12. Red belongs to the player (solid red circle). Hazards never use red. Generic bullets are white; KR is magenta.
+13. Characters customise bullets through `onStep`/`onWall` hooks and compose `combat/patterns/` (line, fan, ring, aimed), not through Bullet subclasses or hand-written spawn loops.
 
 ## Folder layout
 ```
@@ -39,7 +43,7 @@ src/
   director/    Director, interactions, modes/ (TimerMode, WaveMode)
   abilities/   passives/, actives/
   data/        save
-  render/      theme
+  render/      theme, BattleView
 ```
 
 ## Locked game decisions
@@ -68,22 +72,31 @@ src/
 9. Polish and scoring
 
 ## Status
-### Real (built and verified): Phase 1 "Feel"
-- Vite + TS strict + Phaser 3.90 scaffold; `npm run build` (tsc + vite) and `npm test` (36 Vitest tests) pass.
-- `src/tuning.ts`: every feel constant in one file. Current values: SOUL_SPEED 170 px/s, SLOW_MULTIPLIER 0.45, HITBOX_RADIUS 3 px (drawn diamond is 16 px across), MAX_HP 100, IFRAME_DURATION 1.0 s (blink period 0.1 s), KR_DRAIN_RATE 8 HP/s, box 300x220 px. Canvas is 640x480, FIT-scaled.
-- `core/Clock.ts`: fixed 60 Hz accumulator. Each frame is capped at 0.25 s to avoid a spiral of death. BattleScene feeds it `performance.now()` deltas, NOT Phaser's `delta`, because Phaser smooths and caps that, which slowed the simulation when the frame rate dropped. Verified: identical movement at 30, 60 and 144 fps.
-- `core/Box.ts`: centered static box; `toWorld`/`toLocal`/`clampLocal` already handle rotation (tested round-trip).
-- `core/Soul.ts`: pure logic, box-local position, 8-direction movement (diagonals normalized), Shift slow mode, clamped to the interior by the hitbox radius. `damage({amount,type})` is the only damage path. Normal hit: immediate HP loss plus i-frames. KR hit: adds to the pool and grants i-frames; the pool drains continuously (including during i-frames) and never takes HP below 1. The KR pool is capped at hp-1.
-- `combat/Collision.ts`: circle vs circle/rect (rotated)/triangle, pure and tested.
-- BattleScene: geometric render (black box with white border, red diamond soul that blinks in i-frames, hitbox dot visible while slow, bullets masked to the box), HP bar with the KR portion in magenta and "KR" text. Dev-only `window.__battle` handle.
-- TEMPORARY spawner in BattleScene (clearly marked): side lines with a gap, aimed shots, and a sweeping KR bar. Delete it in Phase 2.
-- Browser-verified on the dev server: 8-direction movement, slow mode, edge clamping, single hit plus i-frame blocking, KR drain, and no console errors.
+Live: https://iangopen.github.io/untitledbulletgame/ (deployed by `.github/workflows/deploy.yml` on every push to main; the workflow runs `npm ci`, `npm test` and `npm run build`, and tests gate the deploy).
+
+### Real (built and verified)
+**Phase 1 (Feel)**
+- Fixed 60 Hz `core/Clock.ts`. Scenes feed it `performance.now()` deltas, not Phaser's smoothed `delta`. Each frame is capped at 0.25 s.
+- `core/Box.ts`: static centered box; `toWorld`/`toLocal`/`clampLocal` support rotation.
+- `core/Soul.ts`: 8-direction movement with normalized diagonals, Shift slow mode, clamped to the box. `damage({amount,type})` is the only damage path. KR rules (unchanged in Phase 2): KR adds to a pool that drains 8 HP/s, including through i-frames. KR hits respect and grant i-frames. KR can't drop HP below 1.
+
+**Phase 2 (Bullet system)**
+- `combat/Bullet.ts`: one class with shapes circle, rect, triangle and beam. Size fields `a`/`b` (circle a=r; rect a/b = half extents; triangle a = circumradius; beam a = length, b = thickness). Box-local position and velocity, rotation, spin, faceVelocity, damage, type, lifetime, owner, and `onStep`/`onWall` hooks.
+- `combat/BulletPool.ts`: 1024 preallocated bullets with a free-index stack. Spawning past capacity returns null, counts `dropped` and warns once in dev. `update()` runs the hook, motion, lifetime, wall crossings (inside → outside fires `onWall` with `pass`/`bounce`/`die`, and hooks can spawn through the context for splits) and despawns beyond `DESPAWN_MARGIN`.
+- `combat/patterns/`: `line` (edge, gaps), `fan`, `ring`, `aimed`. Each takes a `style` (any BulletSpec fields) and returns the number spawned.
+- `core/World.ts`: pure step for soul + pool + hits. Hits go `hitTest.bulletHitsCircle` → `Collision.ts` → `Soul.damage`, all in box-local space.
+- `render/BattleView.ts`: draws box, bullets, spawn pop, despawn ghosts, the soul as a red circle, the HP/KR bar, hit flash and shake, and the dev hitbox overlay (H).
+- BattleScene: a deterministic 10 s looping demo (`scenes/demo.ts`) replaced the temporary spawner.
+- DebugScene (dev only; backtick from Battle; dynamically imported, so it's absent from the prod bundle): keys 1–8 fire the patterns, rotated rects, split beams (wall hook), KR and bouncing triangles; 0 is the stress test; C clears; I toggles invincible. Readout shows bullet count, drops, and average/max step ms.
+- Tuning (`src/tuning.ts`): SOUL_RADIUS 6, SOUL_SPEED 170, SLOW_MULTIPLIER 0.45, MAX_HP 100, IFRAME_DURATION 1.0, KR_DRAIN_RATE 8, box 300x220, BULLET_CAPACITY 1024, DESPAWN_MARGIN 48, SPAWN_POP_TIME 0.08, DESPAWN_FADE_TIME 0.12, plus hit shake/flash values.
+- Tests: 70 Vitest cases. They cover collision exact-contact, near-miss (+0.01 px) and graze (−0.01 px) for every shape pair, including rotated rects and triangles; pool, wall hooks, every pattern, and World hits.
+- Browser-verified: hitbox outlines sit on drawn shapes, including rotated ones; near-miss and touch behave correctly in the live World; every pattern fires; bullets despawn off-box; i-frames block repeat hits. Sim step is 0.1–0.3 ms median at 300–900 bullets; a full frame (with the overlay on) is about 4.5 ms at 300 and 13 ms at 900.
 
 ### Open
-- Tuning values above are first guesses; tune by feel
-- Whether KR hits should grant i-frames (currently yes) and whether KR can kill (currently no)
-- Phase 2: Bullet, BulletPool, patterns, debug spawn scene (replaces the temp spawner)
-- Bundle is about 1.5 MB (Phaser); chunk warning suppressed, revisit at deploy
+- Render cost dominates at high bullet counts: Graphics rebuilds every path each frame (~13 ms/frame at 900 bullets). Consider batching or textures-from-shapes if characters need more than ~600 bullets.
+- Despawn ghosts are visual-only (no collision) by design; revisit if that ever reads as unfair.
+- Tuning values are first guesses; tune by feel
+- KR rules (i-frames on KR hits, non-lethal) — Ian deciding
 - KR source: specific characters only, or general?
 - Wave mode: hand-designed or generated?
 - Shop currency source
