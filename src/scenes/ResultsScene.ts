@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
-import { theme } from '../render/theme';
+import { VIEW, space, theme, type } from '../render/theme';
 import type { Outcome } from '../director/Director';
 import { registry } from '../characters/registry';
 import { totalLevel } from '../director/roster';
-import { drawShape, enter, go, label, pop } from './ui';
+import { enter, go, hint, label, pop } from './ui';
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -20,28 +20,28 @@ export class ResultsScene extends Phaser.Scene {
     enter(this);
     const o = data.outcome;
     const roster = { ...o.roster };
-    const { width } = this.scale;
     const win = o.result === 'win';
-    const color = win ? theme.win : theme.loss;
 
-    const g = this.add.graphics();
-    drawShape(g, 'circle', width / 2, 92, 12, theme.soul);
-    const title = label(this, width / 2, 140, win ? 'SURVIVED' : 'DOWN', { size: 40, bold: true, color });
-    pop(this, title, 1.3);
+    // One accent: the result word.
+    const title = label(this, VIEW.cx, 210, win ? 'Survived' : 'Down', { size: type.title, weight: 600, color: win ? theme.win : theme.loss });
+    pop(this, title, 1.12);
 
+    const active = registry.filter((e) => (roster[e.id] ?? 0) > 0);
     const rows: [string, string][] = [
-      ['TIME SURVIVED', formatTime(o.time)],
-      ['HP LEFT', `${Math.ceil(o.hp)} / ${o.maxHp}`],
-      ...registry.map((e): [string, string] => [e.name.toUpperCase(), `LV ${roster[e.id] ?? 0}`]),
-      ['TOTAL DIFFICULTY', String(totalLevel(roster))],
+      ['time', formatTime(o.time)],
+      ['hp left', `${Math.ceil(o.hp)} / ${o.maxHp}`],
+      ...active.map((e): [string, string] => [e.name, String(roster[e.id])]),
+      ['difficulty', String(totalLevel(roster))],
     ];
+    const rowH = type.body + space.md;
+    const y0 = 330;
     rows.forEach(([k, v], i) => {
-      const y = 210 + i * 28;
-      label(this, width / 2 - 20, y, k, { size: 13, color: theme.textDim, align: 'right' });
-      label(this, width / 2 + 20, y, v, { size: 16, bold: true, mono: true, align: 'left' });
+      const y = y0 + i * rowH;
+      label(this, VIEW.cx - space.md, y, k, { size: type.body, color: theme.textDim, align: 'right' });
+      label(this, VIEW.cx + space.md, y, v, { size: type.body, mono: true, align: 'left' });
     });
 
-    label(this, width / 2, 430, 'R / ENTER retry   ESC roster', { size: 12, mono: true, color: theme.textDim });
+    hint(this, 'r retry    esc roster');
     const kb = this.input.keyboard!;
     const retry = () => go(this, 'Battle', { roster: { ...roster } });
     kb.on('keydown-R', retry);

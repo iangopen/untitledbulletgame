@@ -5,6 +5,7 @@ import { pointInTriangle, type Triangle } from '../../combat/Collision';
 import { line } from '../../combat/patterns';
 import type { Prop } from '../../core/World';
 import { theme } from '../../render/theme';
+import { px } from '../../tuning';
 import { prismConfig, type PrismAttack, type PrismRules } from './prism.config';
 
 /** Bullet flag: this beam came out of a refraction prism and ignores prisms from now on. */
@@ -68,8 +69,8 @@ export class Prism extends Character<PrismAttack, PrismRules> {
       const edge = EDGES[Math.floor(this.rng() * 4)]!;
       const [nx, ny] = INWARD[edge];
       const u = this.rng() * 1.6 - 0.8; // position along the edge, -0.8..0.8 of half length
-      const x = nx !== 0 ? -nx * (box.halfWidth + 10) : u * box.halfWidth;
-      const y = ny !== 0 ? -ny * (box.halfHeight + 10) : u * box.halfHeight;
+      const x = nx !== 0 ? -nx * (box.halfWidth + px(10)) : u * box.halfWidth;
+      const y = ny !== 0 ? -ny * (box.halfHeight + px(10)) : u * box.halfHeight;
       let angle = Math.atan2(ny, nx) + (this.rng() - 0.5) * 0.7;
       if (this.prop && prismP && this.rng() < prismP.aimChance!) angle = Math.atan2(this.prop.y - y, this.prop.x - x);
       this.spawnBeam(x, y, angle, p.speed!, p, 0, 0, false);
@@ -117,8 +118,8 @@ export class Prism extends Character<PrismAttack, PrismRules> {
       this.prop = { shape: 'triangle', x: 0, y: 0, r, rotation: 0, color: this.color };
       this.world.props.push(this.prop);
     }
-    this.prop.x = (this.rng() * 2 - 1) * (box.halfWidth - r - 20);
-    this.prop.y = (this.rng() * 2 - 1) * (box.halfHeight - r - 20);
+    this.prop.x = (this.rng() * 2 - 1) * (box.halfWidth - r - px(20));
+    this.prop.y = (this.rng() * 2 - 1) * (box.halfHeight - r - px(20));
     this.prop.rotation = this.rng() * Math.PI * 2;
   }
 

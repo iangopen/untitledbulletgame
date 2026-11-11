@@ -1,14 +1,22 @@
 /**
  * Feel-tuning constants. Every number Ian tunes by hand lives here.
- * Units: pixels, seconds, HP points.
+ * Units: pixels (of the 1280x720 virtual view), seconds, HP points.
  */
 
-/** Soul movement speed in px/s. */
-export const SOUL_SPEED = 170;
+/**
+ * Scale from the original 640x480 view to the 1280x720 view (720 / 480).
+ * Every gameplay distance, size and speed is written as `px(original)` so the soul,
+ * box, bullets and hitboxes keep the same size and speed relative to the view.
+ */
+export const WORLD_SCALE = 1.5;
+export const px = (original: number): number => original * WORLD_SCALE;
+
+/** Soul movement speed in px/s (was 170). */
+export const SOUL_SPEED = px(170);
 /** Speed multiplier while Shift is held. */
 export const SLOW_MULTIPLIER = 0.45;
-/** Soul radius in px. Drawn circle and collision circle are both exactly this. */
-export const SOUL_RADIUS = 6;
+/** Soul radius in px (was 6). Drawn circle and collision circle are both exactly this. */
+export const SOUL_RADIUS = px(6);
 
 /** Maximum HP. */
 export const MAX_HP = 100;
@@ -20,30 +28,26 @@ export const IFRAME_BLINK_PERIOD = 0.1;
 /** KR pool drain rate in HP/s. The pool keeps draining during i-frames. */
 export const KR_DRAIN_RATE = 8;
 
-/** Box interior size in px (Phase 1: static). */
-export const BOX_WIDTH = 300;
-export const BOX_HEIGHT = 220;
-/** Minimum box interior (px). Every resize is clamped to this, so the soul always has room to move. */
-export const BOX_MIN_WIDTH = 60;
-export const BOX_MIN_HEIGHT = 60;
-/** The soul touches a wall when within this many px of being pressed against it. */
-export const WALL_CONTACT_EPS = 0.5;
+/** Box interior size in px (was 300x220). */
+export const BOX_WIDTH = px(300);
+export const BOX_HEIGHT = px(220);
+/** Minimum box interior (px, was 60x60). Every resize is clamped to this, so the soul always has room to move. */
+export const BOX_MIN_WIDTH = px(60);
+export const BOX_MIN_HEIGHT = px(60);
+/** The soul touches a wall when within this many px of being pressed against it (was 0.5). */
+export const WALL_CONTACT_EPS = px(0.5);
 /** Default damage for a damaging wall. */
 export const WALL_DAMAGE = 5;
-/** Damaging wall stroke width (px); safe walls use BOX_BORDER. */
-export const DAMAGING_WALL_WIDTH = 5;
-/** Box border thickness in px. */
-export const BOX_BORDER = 2;
 
 /** Bullet pool capacity. Spawns past this fail with a dev warning. */
 export const BULLET_CAPACITY = 1024;
-/** Bullets despawn once their center is this far outside the box, in px. */
-export const DESPAWN_MARGIN = 48;
+/** Bullets despawn once their center is this far outside the box, in px (was 48). */
+export const DESPAWN_MARGIN = px(48);
 /** Spawn scale-pop duration (s). Draw AND hitbox scale together during it. */
 export const SPAWN_POP_TIME = 0.08;
 /** Despawn fade duration (s). Visual-only ghost; no collision. */
 export const DESPAWN_FADE_TIME = 0.12;
-/** Hit feedback. */
+/** Hit feedback. Shake intensity is a fraction of the view, so it needs no scaling. */
 export const HIT_SHAKE_MS = 90;
 export const HIT_SHAKE_INTENSITY = 0.006;
 export const HIT_FLASH_MS = 70;

@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { World } from '../core/World';
 import { BattleView } from '../render/BattleView';
-import { theme, toCss } from '../render/theme';
+import { VIEW, fonts, theme, toCss, type } from '../render/theme';
+import { applyView, renderScale } from '../render/display';
+import { px } from '../tuning';
 import { FixedLoop } from './FixedLoop';
 import { aimed, fan, line, ring } from '../combat/patterns';
 import type { Wall } from '../combat/Bullet';
@@ -39,20 +41,22 @@ export class DebugScene extends Phaser.Scene {
   }
 
   create(): void {
-    const { width, height } = this.scale;
-    this.world = new World(width / 2, height / 2 - 20);
+    applyView(this);
+    const { width, height } = VIEW;
+    this.world = new World(VIEW.cx, VIEW.cy + px(6));
     this.view = new BattleView(this, this.world);
     this.view.showHitboxes = true;
     this.prism = characterById('prism')!.create(this.world);
     this.events.once('shutdown', () => this.prism.dispose());
     this.loop = new FixedLoop(this);
     this.stepSamples = [];
-    const mono = { fontFamily: 'monospace', fontSize: '12px', color: toCss(theme.textDim) };
-    this.readout = this.add.text(8, 6, '', { ...mono, color: toCss(theme.text) });
-    this.boxText = this.add.text(8, 56, '', { ...mono, color: toCss(theme.textDim) });
+    const mono = { fontFamily: fonts.mono, fontSize: `${type.hint}px`, color: toCss(theme.textDim) };
+    this.readout = this.add.text(16, 12, '', { ...mono, color: toCss(theme.text) }).setResolution(renderScale());
+    this.boxText = this.add.text(16, 80, '', { ...mono, color: toCss(theme.textDim) }).setResolution(renderScale());
     this.add
-      .text(width / 2, height - 26, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
-      .setOrigin(0.5);
+      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
+      .setOrigin(0.5)
+      .setResolution(renderScale());
 
     const kb = this.input.keyboard!;
     const fire: Record<string, () => void> = {

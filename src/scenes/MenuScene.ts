@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { theme } from '../render/theme';
+import { VIEW, space, theme, type } from '../render/theme';
 import { parseRosterParam } from '../director/roster';
-import { drawShape, enter, go, label, nudge, pop } from './ui';
+import { drawShape, enter, go, hint, label, nudge, pop, setColor } from './ui';
 
 interface Option {
   text: string;
@@ -10,8 +10,8 @@ interface Option {
 }
 
 const OPTIONS: Option[] = [
-  { text: 'TIMER MODE', available: true },
-  { text: 'WAVE MODE', available: false, note: 'COMING SOON' },
+  { text: 'Timer', available: true },
+  { text: 'Waves', available: false, note: 'soon' },
 ];
 
 /** The ?roster= dev shortcut applies once per page load, not every time the menu opens. */
@@ -37,22 +37,22 @@ export class MenuScene extends Phaser.Scene {
     }
 
     enter(this);
-    const { width } = this.scale;
+    const { cx } = VIEW;
     const g = this.add.graphics();
-    // Mark: the soul (red circle) between two hazard shapes.
-    drawShape(g, 'triangle', width / 2 - 46, 120, 16, theme.prism);
-    drawShape(g, 'circle', width / 2, 122, 9, theme.soul);
-    drawShape(g, 'square', width / 2 + 46, 122, 15, theme.bulletNormal);
-    label(this, width / 2, 182, 'UNTITLED BULLET GAME', { size: 30, bold: true });
-    label(this, width / 2, 214, 'dodge everything', { size: 13, color: theme.textDim });
+    // Mark: the soul (red circle, the one accent) between two hazard shapes.
+    drawShape(g, 'triangle', cx - 56, 214, 20, theme.prism);
+    drawShape(g, 'circle', cx, 216, 11, theme.soul);
+    drawShape(g, 'square', cx + 56, 216, 18, theme.bulletNormal);
+    label(this, cx, 300, 'untitled bullet game', { size: type.title, weight: 600 });
 
     this.items = OPTIONS.map((o, i) => {
-      const t = label(this, width / 2, 290 + i * 46, o.text, { size: 20, bold: true, color: o.available ? theme.text : theme.locked });
-      if (o.note) label(this, width / 2, 290 + i * 46 + 18, o.note, { size: 10, color: theme.textDim });
+      const y = 420 + i * (type.label + space.md);
+      const t = label(this, cx, y, o.text, { size: type.label, color: o.available ? theme.text : theme.textMuted });
+      if (o.note) label(this, cx + t.width / 2 + space.sm, y + 2, o.note, { size: type.hint, color: theme.textMuted, align: 'left' });
       return t;
     });
     this.marker = this.add.graphics();
-    label(this, width / 2, 440, '↑ ↓ choose   ENTER select', { size: 12, color: theme.textDim, mono: true });
+    hint(this, '↑ ↓ choose    enter select');
 
     this.index = 0;
     this.refresh();
@@ -68,13 +68,17 @@ export class MenuScene extends Phaser.Scene {
   private move(d: number): void {
     this.index = (this.index + d + OPTIONS.length) % OPTIONS.length;
     this.refresh();
-    pop(this, this.items[this.index]!, 1.12);
+    pop(this, this.items[this.index]!, 1.08);
   }
 
   private refresh(): void {
+    this.items.forEach((t, i) => {
+      const o = OPTIONS[i]!;
+      setColor(t, i === this.index ? (o.available ? theme.text : theme.textDim) : o.available ? theme.textDim : theme.textMuted);
+    });
     const t = this.items[this.index]!;
     this.marker.clear();
-    drawShape(this.marker, 'circle', t.x - t.width / 2 - 20, t.y, 6, theme.soul);
+    drawShape(this.marker, 'circle', t.x - t.width / 2 - space.md, t.y, 6, theme.soul);
   }
 
   private choose(): void {

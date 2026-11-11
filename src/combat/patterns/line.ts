@@ -1,3 +1,4 @@
+import { px } from '../../tuning';
 import type { Box } from '../../core/Box';
 import type { Wall } from '../Bullet';
 import { DEFAULT_STYLE, emit, type BulletStyle, type Spawner } from './types';
@@ -9,7 +10,7 @@ export interface LineOptions {
   speed: number;
   /** Indices to leave empty (the safe gap). */
   gaps?: number[];
-  /** Distance outside the edge where bullets start (px). Default 12. */
+  /** Distance outside the edge where bullets start (px). Default px(12). */
   offset?: number;
   style?: Partial<BulletStyle>;
 }
@@ -19,7 +20,7 @@ export function line(target: Spawner, box: Box, o: LineOptions): number {
   const style = { ...DEFAULT_STYLE, ...o.style };
   const hw = box.halfWidth;
   const hh = box.halfHeight;
-  const off = o.offset ?? 12;
+  const off = o.offset ?? px(12);
   const horizontalEdge = o.edge === 'top' || o.edge === 'bottom';
   const span = horizontalEdge ? hw * 2 : hh * 2;
   const step = span / o.count;

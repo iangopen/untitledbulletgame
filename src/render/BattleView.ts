@@ -3,10 +3,10 @@ import type { World } from '../core/World';
 import type { Vec2, Wall } from '../core/Box';
 import { Bullet, bulletCircle, bulletRect, bulletTriangle, rectCorners } from '../combat/Bullet';
 import type { Circle, Rect, Triangle } from '../combat/Collision';
-import { rgb, theme, toCss } from './theme';
+import { fonts, line, rgb, theme, toCss, type } from './theme';
+import { renderScale } from './display';
+import { px } from '../tuning';
 import {
-  BOX_BORDER,
-  DAMAGING_WALL_WIDTH,
   DESPAWN_FADE_TIME,
   HIT_FLASH_MS,
   HIT_SHAKE_INTENSITY,
@@ -67,9 +67,9 @@ export class BattleView {
     this.hudGfx = scene.add.graphics();
     this.maskGfx = scene.make.graphics({}, false);
     this.bulletGfx.setMask(this.maskGfx.createGeometryMask());
-    const font = { fontFamily: 'monospace', fontSize: '14px', color: toCss(theme.text) };
-    this.hpLabel = scene.add.text(0, 0, 'HP', font);
-    this.hpValue = scene.add.text(0, 0, '', font);
+    const font = { fontFamily: fonts.mono, fontSize: `${type.small}px`, color: toCss(theme.textDim) };
+    this.hpLabel = scene.add.text(0, 0, 'hp', { ...font, fontFamily: fonts.sans }).setOrigin(1, 0.5).setResolution(renderScale());
+    this.hpValue = scene.add.text(0, 0, '', font).setOrigin(0, 0.5).setResolution(renderScale());
     world.pool.onDespawn = (b) => this.addGhost(b);
   }
 
@@ -154,9 +154,9 @@ export class BattleView {
       const p0 = this.w[a]!;
       const p1 = this.w[b]!;
       if (ws.damaging) {
-        g.lineStyle(DAMAGING_WALL_WIDTH, ws.type === 'kr' ? theme.kr : theme.wallDamaging, 1);
+        g.lineStyle(line.danger, ws.type === 'kr' ? theme.kr : theme.wallDamaging, 1);
       } else {
-        g.lineStyle(BOX_BORDER, theme.boxBorder, 1);
+        g.lineStyle(line.box, theme.boxBorder, 1);
       }
       g.lineBetween(p0.x, p0.y, p1.x, p1.y);
     }
@@ -223,7 +223,8 @@ export class BattleView {
     og.clear();
     if (!this.showHitboxes) return;
     const { box, soul, pool } = this.world;
-    og.lineStyle(1, theme.hitboxOutline, 1);
+    // Hairline: 1 device pixel, so it shows exactly where the shape edge is at any zoom.
+    og.lineStyle(1 / renderScale(), theme.hitboxOutline, 1);
     for (const b of pool.all) {
       if (!b.active) continue;
       const n = this.shapeWorld(b);
@@ -240,27 +241,27 @@ export class BattleView {
 
   private drawHud(): void {
     const { box, soul } = this.world;
-    const barW = 160;
-    const barH = 12;
-    // HUD is anchored to the default box so it stays put while the box moves.
+    // Thin bar, anchored to the default box so it stays put while the box moves.
+    const barW = px(160);
+    const barH = 6;
     const d = box.defaults;
-    const bx = d.x - barW / 2;
-    const by = d.y + d.height / 2 + 22;
+    const bx = Math.round(d.x - barW / 2);
+    const by = Math.round(d.y + d.height / 2 + px(24));
     const hp = Math.max(0, soul.hp);
-    const px = barW / soul.maxHp;
+    const k = barW / soul.maxHp;
     const g = this.hudGfx;
     g.clear();
     g.fillStyle(theme.hpEmpty, 1);
     g.fillRect(bx, by, barW, barH);
     g.fillStyle(theme.hpFill, 1);
-    g.fillRect(bx, by, (hp - soul.kr) * px, barH);
+    g.fillRect(bx, by, (hp - soul.kr) * k, barH);
     if (soul.kr > 0) {
       g.fillStyle(theme.kr, 1);
-      g.fillRect(bx + (hp - soul.kr) * px, by, soul.kr * px, barH);
+      g.fillRect(bx + (hp - soul.kr) * k, by, soul.kr * k, barH);
     }
-    this.hpLabel.setPosition(bx - 30, by - 2);
-    this.hpValue.setPosition(bx + barW + 10, by - 2);
-    this.hpValue.setText(`${Math.ceil(hp)} / ${soul.maxHp}${soul.kr > 0 ? ' KR' : ''}`);
-    this.hpValue.setColor(toCss(soul.kr > 0 ? theme.kr : theme.text));
+    this.hpLabel.setPosition(bx - 16, by + barH / 2);
+    this.hpValue.setPosition(bx + barW + 16, by + barH / 2);
+    this.hpValue.setText(`${Math.ceil(hp)}${soul.kr > 0 ? '  kr' : ''}`);
+    this.hpValue.setColor(toCss(soul.kr > 0 ? theme.kr : theme.textDim));
   }
 }

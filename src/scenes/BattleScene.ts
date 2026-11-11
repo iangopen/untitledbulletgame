@@ -1,19 +1,20 @@
 import Phaser from 'phaser';
 import { World } from '../core/World';
 import { BattleView } from '../render/BattleView';
-import { theme } from '../render/theme';
+import { VIEW, space, theme, type } from '../render/theme';
 import { FixedLoop } from './FixedLoop';
 import { Director } from '../director/Director';
 import { TimerMode } from '../director/modes/TimerMode';
 import { DEFAULT_ROSTER, normalizeRoster, type Roster } from '../director/roster';
 import { registry } from '../characters/registry';
-import { enter, go, label, pop } from './ui';
+import { drawShape, enter, go, hint, label, pop, setColor } from './ui';
+import { px } from '../tuning';
 
 export interface BattleData {
   roster?: Roster;
 }
 
-const PAUSE_OPTIONS = ['RESUME', 'RESTART', 'QUIT TO ROSTER'] as const;
+const PAUSE_OPTIONS = ['Resume', 'Restart', 'Quit to roster'] as const;
 /** Real ms between the outcome and the results screen, so the final hit reads. */
 const END_DELAY_MS = 700;
 
@@ -36,6 +37,8 @@ export class BattleScene extends Phaser.Scene {
   private pauseLayer!: Phaser.GameObjects.Container;
   private pauseItems: Phaser.GameObjects.Text[] = [];
   private pauseIndex = 0;
+  private pauseMarker!: Phaser.GameObjects.Graphics;
+  private hintText!: Phaser.GameObjects.Text;
   private ending = false;
   private lastShownSecond = -1;
 
@@ -47,8 +50,7 @@ export class BattleScene extends Phaser.Scene {
     enter(this);
     // Fresh state every time: roster is copied plain data, everything else is new.
     this.roster = normalizeRoster(data.roster ?? DEFAULT_ROSTER);
-    const { width, height } = this.scale;
-    this.world = new World(width / 2, height / 2 + 6);
+    this.world = new World(VIEW.cx, VIEW.cy + px(6));
     this.view = new BattleView(this, this.world);
     this.loop = new FixedLoop(this);
     this.director = new Director(this.world, this.roster, new TimerMode(devDuration()));
@@ -56,15 +58,14 @@ export class BattleScene extends Phaser.Scene {
     this.ending = false;
     this.lastShownSecond = -1;
 
-    // HUD: countdown top center, roster summary top left, hint bottom.
-    this.timerText = label(this, width / 2, 40, '', { size: 30, bold: true, mono: true });
-    label(this, width / 2, 66, 'SURVIVE', { size: 10, color: theme.textDim });
+    // HUD: countdown top center (the one bright element), roster summary top left, one quiet hint.
+    this.timerText = label(this, VIEW.cx, 92, '', { size: type.number, mono: true });
     const summary = registry
       .filter((e) => (this.roster[e.id] ?? 0) > 0)
-      .map((e) => `${e.name.toUpperCase()} ${this.roster[e.id]}`)
-      .join('   ');
-    label(this, 16, 22, summary || 'NO CHARACTERS', { size: 12, mono: true, align: 'left', color: summary ? theme.prism : theme.textDim });
-    label(this, width / 2, height - 14, 'arrows / WASD move   shift slow   ESC pause', { size: 11, mono: true, color: theme.textDim });
+      .map((e) => `${e.name} ${this.roster[e.id]}`)
+      .join('    ');
+    label(this, space.lg, space.lg, summary || 'no opponents', { size: type.small, align: 'left', color: theme.textDim });
+    this.hintText = hint(this, 'arrows move    shift slow    esc pause');
 
     this.buildPause();
     const kb = this.input.keyboard!;
@@ -85,14 +86,15 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private buildPause(): void {
-    const { width, height } = this.scale;
     const bg = this.add.graphics();
-    bg.fillStyle(theme.background, 0.82);
-    bg.fillRect(0, 0, width, height);
-    const title = label(this, width / 2, 150, 'PAUSED', { size: 28, bold: true });
-    this.pauseItems = PAUSE_OPTIONS.map((t, i) => label(this, width / 2, 208 + i * 38, t, { size: 18, bold: true }));
-    const hint = label(this, width / 2, 336, '↑ ↓ choose   ENTER select   ESC resume', { size: 11, mono: true, color: theme.textDim });
-    this.pauseLayer = this.add.container(0, 0, [bg, title, ...this.pauseItems, hint]).setDepth(10).setVisible(false);
+    bg.fillStyle(theme.background, 0.88);
+    // Oversized so camera shake never reveals an edge.
+    bg.fillRect(-VIEW.width, -VIEW.height, VIEW.width * 3, VIEW.height * 3);
+    const title = label(this, VIEW.cx, 250, 'Paused', { size: type.title, weight: 600 });
+    this.pauseItems = PAUSE_OPTIONS.map((t, i) => label(this, VIEW.cx, 360 + i * (type.label + space.md), t, { size: type.label }));
+    this.pauseMarker = this.add.graphics();
+    const quiet = label(this, VIEW.cx, VIEW.height - 40, '↑ ↓ choose    enter select    esc resume', { size: type.hint, color: theme.textMuted });
+    this.pauseLayer = this.add.container(0, 0, [bg, title, ...this.pauseItems, this.pauseMarker, quiet]).setDepth(10).setVisible(false);
   }
 
   private pause(): void {
@@ -101,12 +103,14 @@ export class BattleScene extends Phaser.Scene {
     this.pauseIndex = 0;
     this.refreshPause();
     this.pauseLayer.setVisible(true).setAlpha(0);
+    this.hintText.setVisible(false);
     this.tweens.add({ targets: this.pauseLayer, alpha: 1, duration: 90 });
   }
 
   private resume(): void {
     this.paused = false;
     this.pauseLayer.setVisible(false);
+    this.hintText.setVisible(true);
     this.loop.resync(); // don't let the clock "catch up" on time spent paused
   }
 
@@ -117,13 +121,16 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private refreshPause(): void {
-    this.pauseItems.forEach((t, i) => t.setColor(Phaser.Display.Color.IntegerToColor(i === this.pauseIndex ? theme.text : theme.textDim).rgba));
+    this.pauseItems.forEach((t, i) => setColor(t, i === this.pauseIndex ? theme.text : theme.textDim));
+    const t = this.pauseItems[this.pauseIndex]!;
+    this.pauseMarker.clear();
+    drawShape(this.pauseMarker, 'circle', t.x - t.width / 2 - space.md, t.y, 6, theme.soul);
   }
 
   private choosePause(): void {
     const choice = PAUSE_OPTIONS[this.pauseIndex];
-    if (choice === 'RESUME') this.resume();
-    else if (choice === 'RESTART') go(this, 'Battle', { roster: { ...this.roster } });
+    if (choice === 'Resume') this.resume();
+    else if (choice === 'Restart') go(this, 'Battle', { roster: { ...this.roster } });
     else go(this, 'Roster', { roster: { ...this.roster } });
   }
 

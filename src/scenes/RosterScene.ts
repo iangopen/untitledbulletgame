@@ -1,26 +1,30 @@
 import Phaser from 'phaser';
-import { theme } from '../render/theme';
+import { VIEW, line, theme, type } from '../render/theme';
 import { registry, ROSTER_SLOTS, type CharacterEntry } from '../characters/registry';
 import { DEFAULT_ROSTER, clampLevel, normalizeRoster, totalLevel, type Roster } from '../director/roster';
-import { drawShape, enter, go, label, nudge, pop } from './ui';
+import { drawShape, enter, go, hint, label, nudge, pop, setColor } from './ui';
 
 interface Slot {
   entry: CharacterEntry | null; // null = locked placeholder
-  card: Phaser.GameObjects.Container;
-  frame: Phaser.GameObjects.Graphics;
-  level: Phaser.GameObjects.Text;
+  group: Phaser.GameObjects.Container;
+  level: Phaser.GameObjects.Text | null;
 }
 
-const CARD_W = 104;
-const CARD_H = 196;
-const GAP = 12;
+/** Horizontal distance between slot centers. */
+const SLOT_GAP = 200;
+const SHAPE_Y = 300;
+const NAME_Y = 372;
+const LEVEL_Y = 432;
+const UNDERLINE_Y = 470;
+const DIM_ALPHA = 0.4;
 
-/** UCN-style roster: five slots, set each character's level 0-20, Enter to fight. */
+/** UCN-style roster, minimal: shape, name and level per slot; the selected slot is bright and underlined. */
 export class RosterScene extends Phaser.Scene {
   private levels: Record<string, number> = {};
   private slots: Slot[] = [];
   private index = 0;
   private total!: Phaser.GameObjects.Text;
+  private underline!: Phaser.GameObjects.Graphics;
 
   constructor() {
     super('Roster');
@@ -29,19 +33,15 @@ export class RosterScene extends Phaser.Scene {
   create(data: { roster?: Roster } = {}): void {
     enter(this);
     this.levels = { ...normalizeRoster(data.roster ?? DEFAULT_ROSTER) };
-    const { width } = this.scale;
-    label(this, width / 2, 50, 'ROSTER', { size: 26, bold: true });
-    label(this, width / 2, 78, 'TIMER MODE', { size: 12, color: theme.textDim });
+    label(this, VIEW.cx, 150, 'Choose your opponents', { size: type.label, color: theme.textDim });
 
-    const rowW = ROSTER_SLOTS * CARD_W + (ROSTER_SLOTS - 1) * GAP;
-    const x0 = (width - rowW) / 2 + CARD_W / 2;
+    const x0 = VIEW.cx - ((ROSTER_SLOTS - 1) * SLOT_GAP) / 2;
     this.slots = [];
-    for (let i = 0; i < ROSTER_SLOTS; i++) this.slots.push(this.makeSlot(x0 + i * (CARD_W + GAP), 230, registry[i] ?? null));
+    for (let i = 0; i < ROSTER_SLOTS; i++) this.slots.push(this.makeSlot(x0 + i * SLOT_GAP, registry[i] ?? null));
+    this.underline = this.add.graphics();
 
-    this.total = label(this, width / 2, 370, '', { size: 14, mono: true, color: theme.textDim });
-    label(this, width / 2, 420, '← → slot   ↑ ↓ level   Z all 0   X all 20   ENTER fight   ESC menu', {
-      size: 11, mono: true, color: theme.textDim,
-    });
+    this.total = label(this, VIEW.cx, 560, '', { size: type.small, mono: true, color: theme.textMuted });
+    hint(this, '← → choose    ↑ ↓ level    z / x  all 0 / 20    enter start    esc back');
 
     this.index = 0;
     this.refresh();
@@ -61,36 +61,33 @@ export class RosterScene extends Phaser.Scene {
     }
   }
 
-  private makeSlot(x: number, y: number, entry: CharacterEntry | null): Slot {
-    const card = this.add.container(x, y);
-    const frame = this.add.graphics();
+  private makeSlot(x: number, entry: CharacterEntry | null): Slot {
+    const group = this.add.container(x, 0);
     const art = this.add.graphics();
-    card.add([frame, art]);
+    group.add(art);
+    let level: Phaser.GameObjects.Text | null = null;
     if (entry) {
-      drawShape(art, entry.shape, 0, -48, 22, entry.color);
-      card.add(label(this, 0, 0, entry.name.toUpperCase(), { size: 14, bold: true, color: entry.color }));
+      drawShape(art, entry.shape, 0, SHAPE_Y, 34, entry.color);
+      group.add(label(this, 0, NAME_Y, entry.name, { size: type.body }));
+      level = label(this, 0, LEVEL_Y, '0', { size: type.number, mono: true });
+      group.add(level);
     } else {
-      drawShape(art, 'square', 0, -48, 22, theme.locked, true);
-      card.add(label(this, 0, -48, '?', { size: 18, bold: true, color: theme.locked }));
-      card.add(label(this, 0, 0, 'LOCKED', { size: 13, bold: true, color: theme.locked }));
-      card.add(label(this, 0, 18, 'coming soon', { size: 10, color: theme.locked }));
+      // Locked: a faint outline and one dim word.
+      drawShape(art, 'square', 0, SHAPE_Y, 30, theme.locked, true);
+      group.add(label(this, 0, NAME_Y, 'locked', { size: type.small, color: theme.locked }));
     }
-    const level = label(this, 0, 52, '0', { size: 34, bold: true, mono: true, color: entry ? theme.text : theme.locked });
-    card.add(level);
-    card.add(label(this, 0, 80, 'LEVEL', { size: 9, color: theme.textDim }));
-    return { entry, card, frame, level };
+    return { entry, group, level };
   }
 
   private select(d: number): void {
     this.index = (this.index + d + ROSTER_SLOTS) % ROSTER_SLOTS;
     this.refresh();
-    pop(this, this.slots[this.index]!.card, 1.04);
   }
 
   private change(d: number): void {
     const slot = this.slots[this.index]!;
-    if (!slot.entry) {
-      nudge(this, slot.card); // locked: stays at 0
+    if (!slot.entry || !slot.level) {
+      nudge(this, slot.group); // locked: stays at 0
       return;
     }
     const id = slot.entry.id;
@@ -106,7 +103,7 @@ export class RosterScene extends Phaser.Scene {
 
   private setAll(level: number): void {
     for (const s of this.slots) {
-      if (!s.entry) continue;
+      if (!s.entry || !s.level) continue;
       this.levels[s.entry.id] = clampLevel(level, s.entry);
       pop(this, s.level);
     }
@@ -116,19 +113,19 @@ export class RosterScene extends Phaser.Scene {
   private refresh(): void {
     this.slots.forEach((s, i) => {
       const selected = i === this.index;
-      const lv = s.entry ? (this.levels[s.entry.id] ?? 0) : 0;
-      s.level.setText(String(lv));
-      s.level.setColor(Phaser.Display.Color.IntegerToColor(s.entry ? (lv > 0 ? theme.text : theme.textDim) : theme.locked).rgba);
-      s.frame.clear();
-      s.frame.fillStyle(theme.panel, 1);
-      s.frame.fillRect(-CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H);
-      s.frame.lineStyle(selected ? 2 : 1, selected ? theme.boxBorder : theme.locked, 1);
-      s.frame.strokeRect(-CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H);
-      if (selected && s.entry) {
-        s.frame.fillStyle(s.entry.color, 1);
-        s.frame.fillRect(-CARD_W / 2, CARD_H / 2 - 4, CARD_W, 4);
+      s.group.setAlpha(selected ? 1 : s.entry ? DIM_ALPHA : 1);
+      if (s.entry && s.level) {
+        const lv = this.levels[s.entry.id] ?? 0;
+        s.level.setText(String(lv));
+        setColor(s.level, lv > 0 ? theme.text : theme.textDim);
       }
     });
-    this.total.setText(`TOTAL DIFFICULTY  ${totalLevel(this.levels)}`);
+    // Thin accent underline under the selected slot (character color, or muted for locked).
+    const sel = this.slots[this.index]!;
+    const w = 72;
+    this.underline.clear();
+    this.underline.fillStyle(sel.entry ? sel.entry.color : theme.textMuted, 1);
+    this.underline.fillRect(Math.round(sel.group.x - w / 2), UNDERLINE_Y, w, line.thin);
+    this.total.setText(`difficulty ${totalLevel(this.levels)}`);
   }
 }

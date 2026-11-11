@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BulletPool } from './BulletPool';
 import { Box } from '../core/Box';
 import { aimed, fan, line, ring } from './patterns';
-import { DESPAWN_MARGIN } from '../tuning';
+import { DESPAWN_MARGIN, SOUL_RADIUS } from '../tuning';
 import { World } from '../core/World';
 
 const box = new Box(320, 240, 300, 200);
@@ -186,8 +186,8 @@ describe('World: bullets damage the soul only through Soul.damage', () => {
   });
   it('a near miss (0.01 px gap) does not hit', () => {
     const w = new World(0, 0);
-    // soul r 6 + bullet r 4 = 10
-    w.pool.spawn({ shape: 'circle', x: 10.01, y: 0, a: 4, damage: 10, noPop: true });
+    // soul radius + bullet r 4, plus a 0.01 px gap
+    w.pool.spawn({ shape: 'circle', x: SOUL_RADIUS + 4 + 0.01, y: 0, a: 4, damage: 10, noPop: true });
     w.step({ dx: 0, dy: 0, slow: false }, 1 / 60);
     expect(w.soul.hp).toBe(100);
   });
