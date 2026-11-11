@@ -20,9 +20,20 @@ export const theme = {
   prism: 0x3de8ff,
   /** Non-damaging props (e.g. refraction prism) draw as translucent fill + outline. */
   propFillAlpha: 0.18,
+  /** UI */
+  locked: 0x3a3a4a,
+  panel: 0x111119,
+  win: 0x6dff9e,
+  loss: 0xff2a4a,
   /** Dev hitbox overlay. */
   hitboxOutline: 0x39ff88,
 } as const;
 
 export const toCss = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
 export const rgb = (c: number): [number, number, number] => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+
+/** Typography: clean sans for titles/labels, mono for numbers. */
+export const fonts = {
+  sans: '"Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif',
+  mono: 'Consolas, "SF Mono", Menlo, monospace',
+} as const;

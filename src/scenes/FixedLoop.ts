@@ -29,6 +29,11 @@ export class FixedLoop {
     }) as Record<KeyName, Phaser.Input.Keyboard.Key>;
   }
 
+  /** Forget the last frame time (after a pause) so the clock does not try to catch up. */
+  resync(): void {
+    this.last = 0;
+  }
+
   /** Call once per render frame. */
   frame(step: (input: MoveInput, dt: number) => void): void {
     const k = this.keys;
