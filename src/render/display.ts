@@ -4,10 +4,13 @@ import { VIEW } from './theme';
 /**
  * Crisp rendering at any window size and DPI.
  *
- * Scenes lay out in a fixed 1280x720 virtual view (VIEW). The canvas itself is sized to the
- * real device pixels the view will occupy (fit-to-window x devicePixelRatio), and each scene's
- * main camera zooms the virtual view up to that size. Nothing is upscaled by CSS, so edges and
- * text stay sharp. Text is rasterised at the same scale.
+ * Pixel-ratio rule: the canvas backing store is always (displayed CSS size) x devicePixelRatio.
+ * Scenes lay out in a fixed 1280x720 virtual view (VIEW); the canvas is sized to the device pixels
+ * the view occupies (fit-to-host x devicePixelRatio) and each scene's main camera zooms the view up
+ * to that size, so shapes are drawn at physical resolution and nothing is upscaled by CSS.
+ * Re-fits on window resize, host resize and devicePixelRatio changes.
+ * UI text is not drawn here at all: it lives in the HTML layer (src/ui), which the browser
+ * rasterises natively.
  */
 const MIN_SCALE = 0.5;
 const MAX_SCALE = 4;
@@ -63,6 +66,8 @@ export function installResize(game: Phaser.Game): void {
     }
     // Re-fit and re-center the canvas to its parent (Phaser only does this on window resize).
     game.scale.refresh();
+    // Tell overlays (the HTML UI layer) the canvas may have moved.
+    window.dispatchEvent(new Event('game-refit'));
   };
   // Debounced with a timer, not rAF, so it still runs when frames are throttled.
   const onResize = () => {
@@ -70,6 +75,15 @@ export function installResize(game: Phaser.Game): void {
     pending = setTimeout(apply, 60);
   };
   window.addEventListener('resize', onResize);
+  // Pixel-ratio changes (browser zoom, Windows scaling, moving to another monitor) re-fit too.
+  const watchRatio = () => {
+    const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    mq.addEventListener('change', () => {
+      onResize();
+      watchRatio();
+    }, { once: true });
+  };
+  watchRatio();
   // Also catches container size changes that don't resize the window.
   const el = document.getElementById('game');
   if (el && 'ResizeObserver' in window) new ResizeObserver(onResize).observe(el);

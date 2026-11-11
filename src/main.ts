@@ -1,3 +1,5 @@
+// Must stay first: dev-only devicePixelRatio override for testing.
+import './dev/dprOverride';
 import Phaser from 'phaser';
 // Self-hosted fonts (bundled by Vite from npm, no CDN).
 import '@fontsource/inter/latin-400.css';
@@ -10,14 +12,18 @@ import { BattleScene } from './scenes/BattleScene';
 import { ResultsScene } from './scenes/ResultsScene';
 import { theme } from './render/theme';
 import { initialCanvasSize, installResize } from './render/display';
+import { ui } from './ui/UiLayer';
 
 async function boot(): Promise<void> {
-  // Phaser rasterises text once; make sure the webfonts are ready first.
+  // Make sure the webfonts are ready before the first screen renders (DOM UI and dev Phaser text).
   await Promise.all(
     ['400 20px Inter', '600 20px Inter', '400 20px "JetBrains Mono"', '600 20px "JetBrains Mono"'].map((f) =>
       document.fonts.load(f).catch(() => undefined),
     ),
   );
+
+  // HTML UI layer over the canvas (menus, HUD text): crisp at any pixel ratio, mouse-clickable.
+  ui.init(document.getElementById('game')!);
 
   const size = initialCanvasSize();
   const game = new Phaser.Game({
@@ -33,6 +39,7 @@ async function boot(): Promise<void> {
     scene: [MenuScene, RosterScene, BattleScene, ResultsScene],
   });
   installResize(game);
+  ui.attachCanvas(game.canvas);
 
   // Dev-only: DEV is a build-time constant, so this branch and DebugScene are dropped from production.
   if (import.meta.env.DEV) {
