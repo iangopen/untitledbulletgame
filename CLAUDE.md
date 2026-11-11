@@ -13,7 +13,7 @@ Keyboard-only bullet-hell. The player dodges as a soul inside a box (Undertale-s
 - Build gate: `npm run build` must pass (not just `tsc`)
 
 ## Commits
-- Every commit must build and pass tests on its own (`npm run build` and `npm test` on exactly the staged tree). Order commits so dependencies land first; check with `git stash push --keep-index --include-untracked` before committing, then `git stash pop`. (Phase 3's first commit did not build; don't repeat that.)
+- Every commit must build and pass tests on its own (`npm run build` and `npm test` on exactly the staged tree). Order commits so dependencies land first. Check by exporting the index to a scratch folder (`git checkout-index -a --prefix=<dir>/`, add a `node_modules` junction, then test and build there). Don't use `git stash --keep-index`: with a partially staged file its pop conflicts, and once that let a broken commit through. (Phase 3's first commit did not build; don't repeat that.)
 
 ## Commands
 - `npm run dev`: dev server
