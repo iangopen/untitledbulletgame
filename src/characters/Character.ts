@@ -54,8 +54,11 @@ export abstract class Character<A extends string = string, R = Record<string, nu
   abstract readonly id: string;
   abstract readonly color: number;
   abstract readonly config: CharacterConfig<A, R>;
-  /** One method per attack id. Return Shots to have them timed to arrive on the beat. */
-  protected abstract readonly attacks: Record<A, (p: ResolvedAttack) => Shot[] | void>;
+  /**
+   * One method per attack id. Return Shots to have them timed to arrive on the beat, nothing if it
+   * acted immediately, or null if it chose to do nothing this time (no attackStarted).
+   */
+  protected abstract readonly attacks: Record<A, (p: ResolvedAttack) => Shot[] | void | null>;
 
   level = 0;
   resolved: ResolvedLevel<A> = { level: 0, band: -1, attacks: {} };
@@ -63,7 +66,7 @@ export abstract class Character<A extends string = string, R = Record<string, nu
   readonly timers: Partial<Record<A, number>> = {};
   protected readonly rng: () => number;
   /** Game seconds this character has ticked (its own clock for planned spawns). */
-  private clock = 0;
+  protected clock = 0;
   private pending: Pending[] = [];
   /** Attacks whose first plan has run (later plans shift instead of pre-firing). */
   private readonly planned = new Set<string>();
@@ -100,6 +103,19 @@ export abstract class Character<A extends string = string, R = Record<string, nu
     return 0;
   }
 
+  /** Seconds between arrivals for an attack (default: the resolved cooldown). */
+  protected cooldownOf(_id: A, p: ResolvedAttack): number {
+    return p.cooldown ?? 1;
+  }
+
+  /**
+   * The earliest allowed arrival (own clock, s) at or after `at` for this attack. Default: `at`.
+   * Characters with phases return the start of the attack's next window when `at` falls outside one.
+   */
+  protected nextArrival(_id: A, at: number): number {
+    return at;
+  }
+
   /** Called every fixed step before the world steps. */
   tick(dt: number): void {
     if (!this.active) return;
@@ -111,9 +127,17 @@ export abstract class Character<A extends string = string, R = Record<string, nu
       let t = (this.timers[id] ?? 0) - dt;
       const ahead = Math.max(0, this.planAhead(id, p));
       for (let n = 0; t - ahead <= 0 && n < MAX_PLANS_PER_STEP; n++) {
+        // Outside the attack's window: move the next arrival to where the window opens.
+        const at = this.nextArrival(id, this.clock + t);
+        if (at > this.clock + t + 1e-9) {
+          t = at - this.clock;
+          continue;
+        }
         const shots = this.attacks[id](p);
         const plan = { attack: id, started: false };
-        if (!shots || shots.length === 0) {
+        if (shots === null) {
+          // Skipped this beat: nothing happened, so nothing lights up.
+        } else if (!shots || shots.length === 0) {
           this.started(plan);
         } else {
           // Arrive on the beat, or as soon as the slowest shot can if the beat is too close.
@@ -133,7 +157,7 @@ export abstract class Character<A extends string = string, R = Record<string, nu
           }
         }
         this.planned.add(id);
-        t += p.cooldown ?? 1;
+        t += this.cooldownOf(id, p);
       }
       this.timers[id] = t;
     }
