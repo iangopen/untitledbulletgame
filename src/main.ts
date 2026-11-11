@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { BattleScene } from './scenes/BattleScene';
 import { theme } from './render/theme';
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: 640,
@@ -12,3 +12,8 @@ new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [BattleScene],
 });
+
+// Dev-only: DEV is a build-time constant, so this branch and DebugScene are dropped from production.
+if (import.meta.env.DEV) {
+  void import('./scenes/DebugScene').then(({ DebugScene }) => game.scene.add('Debug', DebugScene));
+}

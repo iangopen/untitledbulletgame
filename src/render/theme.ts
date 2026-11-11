@@ -1,17 +1,24 @@
-/** Palette. All colors in the game come from here. */
+/**
+ * Palette. All colors in the game come from here.
+ * Style: near-black background, flat bright solid shapes, crisp edges, no textures.
+ * Hazards never use red (red is the player). Generic hazards are white; KR is magenta.
+ */
 export const theme = {
-  background: 0x07070c,
-  boxBorder: 0xffffff,
+  background: 0x08080d,
+  boxBorder: 0xf4f4f8,
   boxFill: 0x000000,
   soul: 0xff2a4a,
-  text: 0xffffff,
-  textDim: 0x8a8a99,
+  hitFlash: 0xff2a4a,
+  text: 0xf4f4f8,
+  textDim: 0x7c7c8c,
   hpFill: 0xf5e663,
-  hpEmpty: 0x3a1020,
-  kr: 0xd040ff,
-  /** Temporary test-bullet colors (Phase 1 spawner). */
-  bulletNormal: 0xffffff,
-  bulletKr: 0xd040ff,
+  hpEmpty: 0x2a2a36,
+  kr: 0xff2bd6,
+  bulletNormal: 0xf4f4f8,
+  bulletKr: 0xff2bd6,
+  /** Dev hitbox overlay. */
+  hitboxOutline: 0x39ff88,
 } as const;
 
 export const toCss = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
+export const rgb = (c: number): [number, number, number] => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
