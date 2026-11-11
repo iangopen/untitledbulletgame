@@ -36,7 +36,6 @@ export class BattleView {
   private readonly soulGfx: Phaser.GameObjects.Graphics;
   private readonly overlayGfx: Phaser.GameObjects.Graphics;
   private readonly hudGfx: Phaser.GameObjects.Graphics;
-  private readonly maskGfx: Phaser.GameObjects.Graphics;
   /** Visual-only despawn fades. Plain Bullet objects reused as snapshots; never in the pool, never collide. */
   private readonly ghosts: { b: Bullet; t: number; live: boolean }[] = Array.from({ length: GHOSTS }, () => ({
     b: new Bullet(),
@@ -69,8 +68,7 @@ export class BattleView {
     this.soulGfx = scene.add.graphics();
     this.overlayGfx = scene.add.graphics();
     this.hudGfx = scene.add.graphics();
-    this.maskGfx = scene.make.graphics({}, false);
-    this.bulletGfx.setMask(this.maskGfx.createGeometryMask());
+    // Bullets are not clipped to the box: attacks are seen arriving from off screen.
     world.pool.onDespawn = (b) => this.addGhost(b);
   }
 
@@ -167,10 +165,6 @@ export class BattleView {
       }
       g.lineBetween(p0.x, p0.y, p1.x, p1.y);
     }
-    this.maskGfx.clear();
-    this.maskGfx.fillStyle(0xffffff, 1);
-    this.path(this.maskGfx, 4);
-    this.maskGfx.fillPath();
 
     // Bullets, plus fast-fading despawn ghosts.
     const bg = this.bulletGfx;
