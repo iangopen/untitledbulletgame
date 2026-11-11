@@ -1,6 +1,6 @@
 import { Character, type Shot } from '../Character';
 import type { ResolvedAttack } from '../config';
-import type { Bullet, BulletContext, Wall, WallResponse } from '../../combat/Bullet';
+import type { Wall } from '../../combat/Bullet';
 import { pointInTriangle, type Triangle } from '../../combat/Collision';
 import { line, lineOffset } from '../../combat/patterns';
 import { bulletExtent } from '../../combat/Bullet';
@@ -8,7 +8,9 @@ import { maxOffscreenDistance, offscreenStart } from '../../combat/offscreen';
 import type { Prop } from '../../core/World';
 import { theme } from '../../render/theme';
 import { px } from '../../tuning';
-import { prismConfig, type PrismAttack, type PrismRules } from './prism.config';
+import { prismConfig, type PrismAttack, type PrismPhase, type PrismRules } from './prism.config';
+
+export type PrismPhaseState = { phase: PrismPhase | 'breather'; next: PrismPhase };
 
 /** Bullet flag: this beam came out of a refraction prism and ignores prisms from now on. */
 export const REFRACTED = 1;
@@ -24,7 +26,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
   protected readonly attacks = {
     volley: (p: ResolvedAttack) => this.planVolley(p),
     beam: (p: ResolvedAttack) => this.planBeams(p),
-    prism: (p: ResolvedAttack) => this.placePrism(p),
+    prism: (p: ResolvedAttack) => this.relocatePrism(p),
   };
 
   /** Volleys and beams start off screen; plan them early enough to still arrive on the beat. */
@@ -34,11 +36,41 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     return maxOffscreenDistance(this.world.box, extent) / p.speed;
   }
 
-  /** The refraction prism while level >= 15, else null. */
+  /** The refraction prism: shown from the breather before a ray phase until that phase ends. */
   prop: Prop | null = null;
+  /** Own-clock time the prism was last placed (relocation waits a full cooldown). */
+  private placedAt = -Infinity;
+  /** Phase as of the last step ('' until the first tick). */
+  phase: PrismPhase | 'breather' | '' = '';
+
+  /** The phase at own-clock time `t`: wall/ray for phaseLength s, then a breather before the next. */
+  phaseAt(t: number): PrismPhaseState {
+    const { phaseLength: L, breather: B, phaseOrder: order } = this.rules;
+    const k = Math.floor(t / (L + B));
+    const cur = order[k % order.length]!;
+    return t - k * (L + B) < L ? { phase: cur, next: cur } : { phase: 'breather', next: order[(k + 1) % order.length]! };
+  }
+
+  /** Arrivals only inside the attack's own phase window. */
+  protected override nextArrival(id: PrismAttack, at: number): number {
+    const { phaseLength: L, breather: B, phaseOrder: order, attackPhase } = this.rules;
+    const want = attackPhase[id];
+    let k = Math.floor(at / (L + B));
+    for (let i = 0; i <= order.length; i++, k++) {
+      if (order[k % order.length] !== want) continue;
+      const start = k * (L + B);
+      if (at < start) return start;
+      if (at < start + L) return at;
+    }
+    return at;
+  }
+
+  /** phaseIntensity x the band's rate inside each phase. */
+  protected override cooldownOf(_id: PrismAttack, p: ResolvedAttack): number {
+    return p.cooldown! / this.rules.phaseIntensity;
+  }
   private lastEdge: Wall | null = null;
   private readonly tri: Triangle = { ax: 0, ay: 0, bx: 0, by: 0, cx: 0, cy: 0 };
-  private readonly onBeamWall = (b: Bullet, wall: Wall, ctx: BulletContext): WallResponse => this.beamHitWall(b, wall, ctx);
 
   private get rules(): PrismRules {
     return this.config.rules;
@@ -71,7 +103,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     }];
   }
 
-  // --- Levels 6+: beams that split in two at a wall --------------------------
+  // --- Ray phase: beams from off screen; they only multiply through the prism --
   /**
    * Each beam crosses a random point on a random box edge (up to +-20 degrees off the inward normal,
    * or aimed through the prism), starting off screen on that line.
@@ -88,8 +120,9 @@ export class Prism extends Character<PrismAttack, PrismRules> {
       const ex = nx !== 0 ? -nx * box.halfWidth : u * box.halfWidth;
       const ey = ny !== 0 ? -ny * box.halfHeight : u * box.halfHeight;
       let angle = Math.atan2(ny, nx) + (this.rng() - 0.5) * 0.7;
-      const aimed = !!(this.prop && prismP && this.rng() < prismP.aimChance!);
-      if (aimed) angle = Math.atan2(this.prop!.y - ey, this.prop!.x - ex);
+      // Aim is decided at plan time; the beam re-aims at the prism when it fires (if it is up by then).
+      const aimed = !!(prismP && this.rng() < prismP.aimChance!);
+      if (aimed && this.prop) angle = Math.atan2(this.prop!.y - ey, this.prop!.x - ex);
       const start = offscreenStart(box, ex, ey, angle, extent);
       shots.push({
         lead: start.distance / p.speed!,
@@ -104,41 +137,25 @@ export class Prism extends Character<PrismAttack, PrismRules> {
   }
 
   private spawnBeam(x: number, y: number, angle: number, speed: number, p: ResolvedAttack, gen: number, flags: number, child: boolean): void {
+    // White, and no wall hook: rays never split; they only multiply through the refraction prism.
     const b = this.world.pool.spawn({
       shape: 'beam', x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, faceVelocity: true,
       a: p.length!, b: this.rules.beamThickness, damage: p.damage!, owner: this.id, kind: 'white',
-      gen, flags, noPop: child, onWall: this.onBeamWall,
+      gen, flags, noPop: child,
     });
     if (b) this.world.bus.emit('beamFired', { owner: this.id, x, y, angle, gen });
   }
 
-  private canSplit(b: Bullet): boolean {
-    if (b.gen >= this.rules.splitMaxGeneration) return false;
-    if (b.flags & REFRACTED && !this.rules.refractedCanSplit) return false;
-    return true;
+  // --- Ray phase: refraction prism ------------------------------------------
+  /** The 'prism' attack: relocate, once the prism has stood a full (phase) cooldown. */
+  private relocatePrism(p: ResolvedAttack): null | void {
+    if (!this.prop || this.clock - this.placedAt < this.cooldownOf('prism', p) - 1e-9) return null;
+    this.placePrism();
   }
 
-  private beamHitWall(b: Bullet, wall: Wall, _ctx: BulletContext): WallResponse {
-    const p = this.resolved.attacks.beam;
-    const split = !!p && this.canSplit(b);
-    this.world.bus.emit('beamHitWall', { owner: this.id, wall, x: b.x, y: b.y, gen: b.gen, split });
-    if (!split) return 'pass';
+  private placePrism(): void {
     const { box } = this.world;
-    // Reflect off the wall, then split into two halves either side of the reflection.
-    const vertical = wall === 'left' || wall === 'right';
-    const rvx = vertical ? -b.vx : b.vx;
-    const rvy = vertical ? b.vy : -b.vy;
-    const base = Math.atan2(rvy, rvx);
-    const speed = Math.hypot(b.vx, b.vy);
-    const x = Math.max(-box.halfWidth, Math.min(box.halfWidth, b.x));
-    const y = Math.max(-box.halfHeight, Math.min(box.halfHeight, b.y));
-    for (const s of [-0.5, 0.5]) this.spawnBeam(x, y, base + s * p.splitSpread!, speed, p, b.gen + 1, b.flags, true);
-    return 'die';
-  }
-
-  // --- Levels 15+: refraction prism -----------------------------------------
-  private placePrism(_p: ResolvedAttack): void {
-    const { box } = this.world;
+    this.placedAt = this.clock;
     const r = this.rules.prismRadius;
     if (!this.prop) {
       this.prop = { shape: 'triangle', x: 0, y: 0, r, rotation: 0, color: this.color };
@@ -163,6 +180,18 @@ export class Prism extends Character<PrismAttack, PrismRules> {
 
   /** Any of our beams whose center enters the prism fans into refractCount beams that ignore prisms. */
   protected override update(): void {
+    // Phase bookkeeping: event on every change; the prism shows from the breather before a ray
+    // phase (a telegraph) until the ray phase ends.
+    const st = this.phaseAt(this.clock);
+    if (st.phase !== this.phase) {
+      this.phase = st.phase;
+      this.world.bus.emit('prismPhaseChanged', { owner: this.id, phase: st.phase, next: st.next });
+    }
+    if (st.next === 'ray' && !this.prop) {
+      this.placePrism();
+    } else if (st.next !== 'ray' && this.prop) {
+      this.removePrism();
+    }
     const prop = this.prop;
     const pp = this.resolved.attacks.prism;
     const bp = this.resolved.attacks.beam;
@@ -179,16 +208,14 @@ export class Prism extends Character<PrismAttack, PrismRules> {
       this.world.pool.release(b, 'cleared');
       for (let i = 0; i < n; i++) {
         const t = n === 1 ? 0 : i / (n - 1) - 0.5;
-        this.spawnBeam(x, y, angle + t * pp.refractSpread!, speed, bp, gen, flags, true);
+        this.spawnBeam(x, y, angle + t * pp.refractSpread!, speed, bp, gen + 1, flags, true);
       }
       this.world.bus.emit('beamRefracted', { owner: this.id, x, y, count: n });
     }
   }
 
   protected override onLevelChanged(): void {
-    const pp = this.resolved.attacks.prism;
-    if (!pp) this.removePrism();
-    else if (!this.prop) this.placePrism(pp);
+    if (!this.active) this.removePrism();
   }
 
   private removePrism(): void {

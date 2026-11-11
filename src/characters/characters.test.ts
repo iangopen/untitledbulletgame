@@ -78,21 +78,29 @@ describe('validateConfig', () => {
 
 describe('Prism bands', () => {
   const attacksAt = (l: number) => Object.keys(resolveLevel(prismConfig, l).attacks).sort();
-  it('1-5 volley; 6-14 + beam; 15-20 + prism', () => {
-    for (const l of [1, 3, 5]) expect(attacksAt(l)).toEqual(['volley']);
-    for (const l of [6, 10, 14]) expect(attacksAt(l)).toEqual(['beam', 'volley']);
-    for (const l of [15, 20]) expect(attacksAt(l)).toEqual(['beam', 'prism', 'volley']);
+  it('every level 1-20 has both phases: volley (wall), beam and prism (ray)', () => {
+    for (const l of [1, 5, 6, 10, 14, 15, 20]) expect(attacksAt(l)).toEqual(['beam', 'prism', 'volley']);
+    const r = prismConfig.rules;
+    expect(r.attackPhase).toEqual({ volley: 'wall', beam: 'ray', prism: 'ray' });
+    expect(r.phaseOrder).toEqual(['wall', 'ray']);
+    expect(r.phaseLength).toBeGreaterThan(0);
+    expect(r.breather).toBeGreaterThanOrEqual(0);
+    expect(r.phaseIntensity).toBeGreaterThanOrEqual(1);
   });
-  it('difficulty never decreases with level (damage, speed up; cooldown down)', () => {
-    for (const atk of ['volley', 'beam'] as const) {
+  it('difficulty never decreases with level (more of: damage, speed, count, aim, spread; less of: cooldown, gap)', () => {
+    const up = ['damage', 'speed', 'count', 'length', 'aimChance', 'refractSpread'];
+    const down = ['cooldown', 'gapSize'];
+    for (const atk of ['volley', 'beam', 'prism'] as const) {
       let prev: Record<string, number> | undefined;
       for (let l = 1; l <= 20; l++) {
-        const a = resolveLevel(prismConfig, l).attacks[atk];
-        if (!a) continue;
+        const a = resolveLevel(prismConfig, l).attacks[atk]!;
+        expect(a).toBeDefined();
         if (prev) {
-          expect(a.damage!).toBeGreaterThanOrEqual(prev.damage!);
-          expect(a.speed!).toBeGreaterThanOrEqual(prev.speed!);
-          expect(a.cooldown!).toBeLessThanOrEqual(prev.cooldown!);
+          for (const k of Object.keys(a)) {
+            if (up.includes(k)) expect(a[k]!, `${atk}.${k} at L${l}`).toBeGreaterThanOrEqual(prev[k]!);
+            else if (down.includes(k)) expect(a[k]!, `${atk}.${k} at L${l}`).toBeLessThanOrEqual(prev[k]!);
+            else throw new Error(`unclassified param ${atk}.${k}`);
+          }
         }
         prev = a;
       }
@@ -109,9 +117,8 @@ function run(w: World, c: Prism, seconds: number): void {
   }
 }
 function record(bus: EventBus) {
-  const log: { [K in 'beamFired' | 'beamHitWall' | 'beamRefracted']: GameEvents[K][] } = { beamFired: [], beamHitWall: [], beamRefracted: [] };
+  const log: { [K in 'beamFired' | 'beamRefracted']: GameEvents[K][] } = { beamFired: [], beamRefracted: [] };
   bus.on('beamFired', (e) => log.beamFired.push(e));
-  bus.on('beamHitWall', (e) => log.beamHitWall.push(e));
   bus.on('beamRefracted', (e) => log.beamRefracted.push(e));
   return log;
 }
@@ -184,8 +191,13 @@ describe('Prism behaviour', () => {
     const spacing = arrivals.slice(1).map((t, i) => t - arrivals[i]!);
     // eslint-disable-next-line no-console
     console.log(`L5 arrivals (s): ${arrivals.map((t) => t.toFixed(2)).join(' ')}`);
-    expect(arrivals.length).toBeGreaterThan(10);
-    for (const d of spacing.slice(1)) expect(Math.abs(d - cd)).toBeLessThan(STEP * 2 + 1e-9);
+    // Inside a wall phase rows arrive every cooldown / phaseIntensity; longer gaps are the ray
+    // phase and breathers (and the battle-start shift of the second row).
+    const beat = cd / prismConfig.rules.phaseIntensity;
+    const inPhase = spacing.filter((d) => d < beat * 1.5);
+    expect(inPhase.length).toBeGreaterThan(10);
+    for (const d of inPhase) expect(Math.abs(d - beat)).toBeLessThan(STEP * 2 + 1e-9);
+    for (const d of spacing.filter((d) => d >= beat * 1.5)) expect(d).toBeGreaterThan(prismConfig.rules.breather);
   });
   it('the first attack reaches the box about 1 s into a battle (pre-fired) at levels 1, 10 and 20', () => {
     for (const level of [1, 10, 20]) {
@@ -222,40 +234,100 @@ describe('Prism behaviour', () => {
     run(w, p, 15);
     expect(events.some((e) => e.attack === 'volley')).toBe(true);
     expect(events.some((e) => e.attack === 'beam')).toBe(true);
-    expect(events.every((e) => e.spawnedNow > 0)).toBe(true);
+    // Projectile attacks light up when their first projectile spawns; the prism relocation has none.
+    expect(events.filter((e) => e.attack !== 'prism').every((e) => e.spawnedNow > 0)).toBe(true);
   });
-  it('beams split once at a wall; children never split again', () => {
-    const w = new World(0, 0);
+  it('phases: only volleys reach the box in wall phases, only rays in ray phases; all white; nothing spawns inside except refractions; no splits', () => {
+    for (const level of [1, 10, 20]) {
+      const w = new World(640, 369);
+      const p = new Prism(w);
+      p.setLevel(level);
+      const phases: string[] = [];
+      w.bus.on('prismPhaseChanged', (e) => phases.push(`${e.phase}@${(Math.round(w.time * 10) / 10).toFixed(1)}`));
+      const log = record(w.bus);
+      const seen = new Set<Bullet>();
+      const entered = new Set<Bullet>();
+      let insideSpawns = 0;
+      let refractedInside = 0;
+      let wrongPhase = 0;
+      let prismInWall = 0;
+      const counts = { volley: 0, ray: 0 };
+      for (let i = 0; i < 60 * 40; i++) {
+        p.tick(STEP);
+        // New bullets this tick (spawned by the character, before the world moves them).
+        for (const b of w.pool.all) {
+          if (!b.active || seen.has(b)) continue;
+          seen.add(b);
+          expect(b.kind).toBe('white');
+          if (Math.abs(b.x) <= w.box.halfWidth && Math.abs(b.y) <= w.box.halfHeight) {
+            if (b.flags & REFRACTED) refractedInside++;
+            else insideSpawns++;
+          }
+        }
+        w.step(still, STEP);
+        w.soul.iframes = 1;
+        if (p.phase === 'wall' && w.props.length > 0) prismInWall++;
+        for (const b of w.pool.all) {
+          if (!b.active || entered.has(b) || b.flags & REFRACTED) continue;
+          if (Math.abs(b.x) > w.box.halfWidth || Math.abs(b.y) > w.box.halfHeight) continue;
+          entered.add(b);
+          const want = b.shape === 'triangle' ? 'wall' : 'ray';
+          counts[b.shape === 'triangle' ? 'volley' : 'ray']++;
+          // Within a step either side of the detection (sim clock vs. detection rounding at window edges).
+          if (![-2 * STEP, 0, STEP].some((d) => p.phaseAt(w.time + d).phase === want)) wrongPhase++;
+        }
+        for (const b of [...seen]) if (!b.active) { seen.delete(b); entered.delete(b); }
+      }
+      // eslint-disable-next-line no-console
+      console.log(`L${level}: ${phases.join(' ')} | entered: ${counts.volley} triangles, ${counts.ray} rays | spawned inside: ${insideSpawns} (refracted at prism: ${refractedInside}) | wrong phase: ${wrongPhase} | refractions ${log.beamRefracted.length}`);
+      expect(phases.slice(0, 5)).toEqual(['wall@0.0', 'breather@8.0', 'ray@9.0', 'breather@17.0', 'wall@18.0']);
+      expect(wrongPhase).toBe(0);
+      expect(insideSpawns).toBe(0);
+      expect(prismInWall).toBe(0);
+      expect(counts.volley).toBeGreaterThan(0);
+      expect(counts.ray).toBeGreaterThan(0);
+    }
+  });
+  it('rays never split: no wall hook, and the only extra beams come from refractions (3 each)', () => {
+    const w = new World(640, 369);
     const p = new Prism(w);
-    p.setLevel(10);
+    p.setLevel(20);
     const log = record(w.bus);
-    run(w, p, 12);
-    const original = log.beamHitWall.filter((e) => e.gen === 0);
-    const children = log.beamHitWall.filter((e) => e.gen === 1);
-    expect(original.length).toBeGreaterThan(0);
-    expect(original.every((e) => e.split)).toBe(true);
-    expect(children.length).toBeGreaterThan(0);
-    expect(children.every((e) => !e.split)).toBe(true);
-    // every split spawned exactly two gen-1 beams
-    expect(log.beamFired.filter((e) => e.gen === 1).length).toBe(original.length * 2);
-    expect(log.beamFired.some((e) => e.gen > 1)).toBe(false);
+    let hooks = 0;
+    for (let i = 0; i < 60 * 40; i++) {
+      p.tick(STEP);
+      for (const b of w.pool.all) if (b.active && b.onWall) hooks++;
+      w.step(still, STEP);
+      w.soul.iframes = 1;
+    }
+    expect(hooks).toBe(0);
+    expect(log.beamRefracted.length).toBeGreaterThan(0);
+    // Every extra beam is a refraction (gen 1): exactly 3 per refraction event, none from walls.
+    expect(log.beamFired.filter((e) => e.gen === 1).length).toBe(log.beamRefracted.length * 3);
+    expect(log.beamFired.every((e) => e.gen <= 1)).toBe(true);
   });
-  it('the refraction prism is placed at 15+, removed below, and never damages', () => {
+  it('the refraction prism shows from the breather before a ray phase to its end, and never damages', () => {
     const w = new World(0, 0);
     const p = new Prism(w);
-    p.setLevel(15);
+    p.setLevel(1);
+    run(w, p, 4);
+    expect(w.props.length).toBe(0); // wall phase
+    run(w, p, 4.5); // 8.5 s: breather before the ray phase
     expect(w.props.length).toBe(1);
     w.soul.pos.x = p.prop!.x;
     w.soul.pos.y = p.prop!.y;
     w.step(still, STEP);
     expect(w.soul.hp).toBe(w.soul.maxHp);
-    p.setLevel(14);
+    run(w, p, 9); // 17.5 s: breather before the wall phase
+    expect(w.props.length).toBe(0);
+    p.setLevel(0);
     expect(w.props.length).toBe(0);
   });
   it('a beam through the prism becomes exactly three that ignore prisms', () => {
     const w = new World(0, 0);
     const p = new Prism(w);
     p.setLevel(20);
+    run(w, p, 10); // into the ray phase
     const prop = p.prop!;
     prop.x = 0; prop.y = 0; prop.rotation = 0;
     const log = record(w.bus);
@@ -273,8 +345,7 @@ describe('Prism behaviour', () => {
     // they all carry REFRACTED and never refract again
     const live = w.pool.all.filter((b) => b.active);
     expect(live.every((b) => (b.flags & REFRACTED) !== 0)).toBe(true);
-    // refracted beams exit without splitting (refractedCanSplit = false)
-    expect(log.beamHitWall.every((e) => !e.split)).toBe(true);
+    expect(live.every((b) => !b.onWall)).toBe(true);
   });
   it('level 20 stays bounded over a long run', () => {
     const w = new World(0, 0);

@@ -11,12 +11,15 @@ export interface GameEvents {
    * projectiles, the attack ran). Emitted by the Character base for every character.
    */
   attackStarted: { owner: string; attack: string };
-  /** A character fired a beam (gen 0 = original, 1 = split/refracted child). */
+  /** A character fired a beam (gen 0 = original, 1 = refracted child). */
   beamFired: { owner: string; x: number; y: number; angle: number; gen: number };
-  /** A beam's center crossed a box wall from inside. `split` says whether it split there. */
-  beamHitWall: { owner: string; wall: Wall; x: number; y: number; gen: number; split: boolean };
   /** A beam passed through a refraction prism and fanned out. */
   beamRefracted: { owner: string; x: number; y: number; count: number };
+  /**
+   * Prism's phase changed. `phase` is what runs now ('breather' = no new arrivals); `next` is the
+   * phase that follows (for a breather) or the current one.
+   */
+  prismPhaseChanged: { owner: string; phase: 'wall' | 'ray' | 'breather'; next: 'wall' | 'ray' };
   /** A resize was requested (target size after the min-size clamp). anchor = fixed wall or 'center'. */
   boxResized: { width: number; height: number; duration: number; anchor: string };
   /** A move was requested (world-space target center). */

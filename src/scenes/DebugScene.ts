@@ -154,7 +154,7 @@ export class DebugScene extends Phaser.Scene {
     line(this.world.pool, this.world.box, { edge, count: 10, speed: px(110), gaps: [4, 5] });
   }
 
-  /** Demonstrates the wall hook: beams split into two at the wall they hit (Prism-style). */
+  /** Demonstrates the wall hook: beams split into two at the wall they hit (a generic hook demo; Prism no longer splits). */
   private fireSplitBeams(): void {
     const w = this.world;
     for (const angle of [-0.6, 0, 0.6]) {
