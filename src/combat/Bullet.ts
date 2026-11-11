@@ -12,7 +12,8 @@ import { SPAWN_POP_TIME } from '../tuning';
  * so what you see is exactly what hits you.
  */
 export type BulletShape = 'circle' | 'rect' | 'triangle' | 'beam';
-export type Wall = 'left' | 'right' | 'top' | 'bottom';
+import type { Wall } from '../core/Box';
+export type { Wall };
 /** What a bullet does after its center crosses a box wall from inside. */
 export type WallResponse = 'pass' | 'bounce' | 'die';
 

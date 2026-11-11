@@ -1,4 +1,5 @@
-import type { Wall } from '../combat/Bullet';
+import type { Wall } from './Box';
+import type { DamageType } from './Soul';
 
 /**
  * Every game event and its payload. Characters talk only through these;
@@ -11,6 +12,16 @@ export interface GameEvents {
   beamHitWall: { owner: string; wall: Wall; x: number; y: number; gen: number; split: boolean };
   /** A beam passed through a refraction prism and fanned out. */
   beamRefracted: { owner: string; x: number; y: number; count: number };
+  /** A resize was requested (target size after the min-size clamp). anchor = fixed wall or 'center'. */
+  boxResized: { width: number; height: number; duration: number; anchor: string };
+  /** A move was requested (world-space target center). */
+  boxMoved: { x: number; y: number; duration: number };
+  /** A rotation was requested (absolute target, radians). */
+  boxRotated: { rotation: number; duration: number };
+  /** A wall became safe or damaging. */
+  wallStateChanged: { wall: Wall; damaging: boolean; damage: number; type: DamageType };
+  /** A damaging wall touched the soul and the damage applied (not blocked by i-frames). */
+  wallHit: { wall: Wall; damage: number; type: DamageType };
 }
 
 export type EventName = keyof GameEvents;

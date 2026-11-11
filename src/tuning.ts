@@ -23,6 +23,15 @@ export const KR_DRAIN_RATE = 8;
 /** Box interior size in px (Phase 1: static). */
 export const BOX_WIDTH = 300;
 export const BOX_HEIGHT = 220;
+/** Minimum box interior (px). Every resize is clamped to this, so the soul always has room to move. */
+export const BOX_MIN_WIDTH = 60;
+export const BOX_MIN_HEIGHT = 60;
+/** The soul touches a wall when within this many px of being pressed against it. */
+export const WALL_CONTACT_EPS = 0.5;
+/** Default damage for a damaging wall. */
+export const WALL_DAMAGE = 5;
+/** Damaging wall stroke width (px); safe walls use BOX_BORDER. */
+export const DAMAGING_WALL_WIDTH = 5;
 /** Box border thickness in px. */
 export const BOX_BORDER = 2;
 

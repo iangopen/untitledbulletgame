@@ -35,7 +35,9 @@ export type DamageResult = 'applied' | 'blocked' | 'dead';
  *  - KR hits respect and grant i-frames, same as normal hits.
  */
 export class Soul {
+  /** Box-local position (DEFAULT, Ian may change): the soul rides with the box when it moves or rotates. */
   readonly pos: Vec2 = { x: 0, y: 0 };
+  private readonly dir: Vec2 = { x: 0, y: 0 };
   /** Drawn radius == collision radius. */
   readonly hitRadius = SOUL_RADIUS;
   hp = MAX_HP;
@@ -53,6 +55,10 @@ export class Soul {
     return this.iframes > 0;
   }
 
+  /**
+   * Controls are screen-relative (DEFAULT, Ian may change): input is rotated into box-local space,
+   * so "up" always moves up on screen even when the box is rotated.
+   */
   move(input: MoveInput, dt: number, box: Box): void {
     if (!this.alive) return;
     let { dx, dy } = input;
@@ -61,9 +67,10 @@ export class Soul {
       dx *= Math.SQRT1_2;
       dy *= Math.SQRT1_2;
     }
+    const d = box.dirToLocal({ x: dx, y: dy }, this.dir);
     const speed = SOUL_SPEED * (input.slow ? SLOW_MULTIPLIER : 1);
-    this.pos.x += dx * speed * dt;
-    this.pos.y += dy * speed * dt;
+    this.pos.x += d.x * speed * dt;
+    this.pos.y += d.y * speed * dt;
     box.clampLocal(this.pos, this.hitRadius);
   }
 

@@ -107,7 +107,7 @@ function run(w: World, c: Prism, seconds: number): void {
   }
 }
 function record(bus: EventBus) {
-  const log: { [K in keyof GameEvents]: GameEvents[K][] } = { beamFired: [], beamHitWall: [], beamRefracted: [] };
+  const log: { [K in 'beamFired' | 'beamHitWall' | 'beamRefracted']: GameEvents[K][] } = { beamFired: [], beamHitWall: [], beamRefracted: [] };
   bus.on('beamFired', (e) => log.beamFired.push(e));
   bus.on('beamHitWall', (e) => log.beamHitWall.push(e));
   bus.on('beamRefracted', (e) => log.beamRefracted.push(e));
