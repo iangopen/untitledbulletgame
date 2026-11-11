@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Box } from './Box';
 import { Clock, MAX_FRAME, STEP } from './Clock';
 import { Soul } from './Soul';
-import { HITBOX_RADIUS, IFRAME_DURATION, KR_DRAIN_RATE, MAX_HP, SLOW_MULTIPLIER, SOUL_SPEED } from '../tuning';
+import { SOUL_RADIUS, IFRAME_DURATION, KR_DRAIN_RATE, MAX_HP, SLOW_MULTIPLIER, SOUL_SPEED } from '../tuning';
 
 describe('Clock', () => {
   it('runs 60 steps per simulated second regardless of frame size', () => {
@@ -49,8 +49,8 @@ describe('Box', () => {
 describe('Soul', () => {
   const box = new Box(0, 0, 1000, 1000);
 
-  it('hitbox is clearly smaller than the drawn soul', () => {
-    expect(HITBOX_RADIUS).toBeLessThan(5);
+  it('collision radius is the drawn radius', () => {
+    expect(new Soul().hitRadius).toBe(SOUL_RADIUS);
   });
   it('moves at SOUL_SPEED, same speed on diagonals', () => {
     const s = new Soul();
@@ -69,7 +69,7 @@ describe('Soul', () => {
     const small = new Box(0, 0, 100, 60);
     const s = new Soul();
     for (let i = 0; i < 600; i++) s.move({ dx: 1, dy: 1, slow: false }, STEP, small);
-    expect(s.pos).toEqual({ x: 50 - HITBOX_RADIUS, y: 30 - HITBOX_RADIUS });
+    expect(s.pos).toEqual({ x: 50 - SOUL_RADIUS, y: 30 - SOUL_RADIUS });
   });
   it('normal hit applies once, then i-frames block', () => {
     const s = new Soul();

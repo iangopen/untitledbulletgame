@@ -1,10 +1,10 @@
 import type { Box, Vec2 } from './Box';
 import {
-  HITBOX_RADIUS,
   IFRAME_DURATION,
   KR_DRAIN_RATE,
   MAX_HP,
   SLOW_MULTIPLIER,
+  SOUL_RADIUS,
   SOUL_SPEED,
 } from '../tuning';
 
@@ -36,7 +36,8 @@ export type DamageResult = 'applied' | 'blocked' | 'dead';
  */
 export class Soul {
   readonly pos: Vec2 = { x: 0, y: 0 };
-  readonly hitRadius = HITBOX_RADIUS;
+  /** Drawn radius == collision radius. */
+  readonly hitRadius = SOUL_RADIUS;
   hp = MAX_HP;
   readonly maxHp = MAX_HP;
   /** HP still owed to KR poison. */

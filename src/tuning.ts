@@ -7,10 +7,8 @@
 export const SOUL_SPEED = 170;
 /** Speed multiplier while Shift is held. */
 export const SLOW_MULTIPLIER = 0.45;
-/** Collision radius of the soul in px. Deliberately much smaller than the drawn soul. */
-export const HITBOX_RADIUS = 3;
-/** Half-size of the drawn soul in px (visual only). */
-export const SOUL_DRAW_SIZE = 8;
+/** Soul radius in px. Drawn circle and collision circle are both exactly this. */
+export const SOUL_RADIUS = 6;
 
 /** Maximum HP. */
 export const MAX_HP = 100;
@@ -27,3 +25,16 @@ export const BOX_WIDTH = 300;
 export const BOX_HEIGHT = 220;
 /** Box border thickness in px. */
 export const BOX_BORDER = 2;
+
+/** Bullet pool capacity. Spawns past this fail with a dev warning. */
+export const BULLET_CAPACITY = 1024;
+/** Bullets despawn once their center is this far outside the box, in px. */
+export const DESPAWN_MARGIN = 48;
+/** Spawn scale-pop duration (s). Draw AND hitbox scale together during it. */
+export const SPAWN_POP_TIME = 0.08;
+/** Despawn fade duration (s). Visual-only ghost; no collision. */
+export const DESPAWN_FADE_TIME = 0.12;
+/** Hit feedback. */
+export const HIT_SHAKE_MS = 90;
+export const HIT_SHAKE_INTENSITY = 0.006;
+export const HIT_FLASH_MS = 70;

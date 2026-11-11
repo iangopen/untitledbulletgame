@@ -1,5 +1,8 @@
 /** Pure shape-vs-shape tests. All inputs share one coordinate frame (box-local). */
 
+/** Touching counts as a hit; EPS absorbs float error from rotations so exact edge contact is stable. */
+export const EPS = 1e-6;
+
 export interface Circle {
   x: number;
   y: number;
@@ -29,7 +32,7 @@ export function circleVsCircle(a: Circle, b: Circle): boolean {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   const rr = a.r + b.r;
-  return dx * dx + dy * dy <= rr * rr;
+  return dx * dx + dy * dy <= rr * rr + EPS;
 }
 
 export function circleVsRect(c: Circle, rect: Rect): boolean {
@@ -48,7 +51,7 @@ export function circleVsRect(c: Circle, rect: Rect): boolean {
   const qy = Math.min(rect.hh, Math.max(-rect.hh, dy));
   const ex = dx - qx;
   const ey = dy - qy;
-  return ex * ex + ey * ey <= c.r * c.r;
+  return ex * ex + ey * ey <= c.r * c.r + EPS;
 }
 
 /** Squared distance from point P to segment AB. */
@@ -82,7 +85,7 @@ export function pointInTriangle(px: number, py: number, t: Triangle): boolean {
 /** Works for either winding order. */
 export function circleVsTriangle(c: Circle, t: Triangle): boolean {
   if (pointInTriangle(c.x, c.y, t)) return true;
-  const r2 = c.r * c.r;
+  const r2 = c.r * c.r + EPS;
   return (
     distSqPointSegment(c.x, c.y, t.ax, t.ay, t.bx, t.by) <= r2 ||
     distSqPointSegment(c.x, c.y, t.bx, t.by, t.cx, t.cy) <= r2 ||
