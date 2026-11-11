@@ -70,6 +70,16 @@ export const UI_CSS = `
 #ui-root .srow .arrow { font-size: ${type.body}px; }
 #ui-root .srow.sel .arrow { color: ${c(theme.textDim)}; }
 
+/* Character profile boxes (battle): a thin dim square with the character's shape; lights up in
+   its accent (--accent) when it starts an attack, then fades back. */
+#ui-root .profile { width: 44px; height: 44px; box-sizing: border-box; border: ${line.thin}px solid ${c(theme.rule)};
+  display: flex; align-items: center; justify-content: center; }
+#ui-root .profile.lit { animation: ui-profile-lit 450ms ease-out; }
+@keyframes ui-profile-lit {
+  from { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 28%, transparent); }
+  to { border-color: ${c(theme.rule)}; background: transparent; }
+}
+
 /* Quiet HUD button (pause): dim, bright on hover. */
 #ui-root .hud-btn { color: ${c(theme.textDim)}; padding: 8px 0; }
 #ui-root .hud-btn:hover { color: ${c(theme.text)}; }

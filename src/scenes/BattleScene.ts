@@ -6,8 +6,8 @@ import { FixedLoop } from './FixedLoop';
 import { Director } from '../director/Director';
 import { TimerMode } from '../director/modes/TimerMode';
 import { DEFAULT_ROSTER, normalizeRoster, type Roster } from '../director/roster';
-import { registry } from '../characters/registry';
-import { at, h, replay } from '../ui/dom';
+import { registry, type CharacterEntry } from '../characters/registry';
+import { at, h, replay, shape } from '../ui/dom';
 import { enter, go, mountScreen } from './ui';
 import { px } from '../tuning';
 import { perfOverlay } from '../ui/PerfOverlay';
@@ -51,6 +51,10 @@ export class BattleScene extends Phaser.Scene {
   private pauseEl!: HTMLElement;
   private pauseItems: HTMLElement[] = [];
   private hudScreen!: HTMLElement;
+  /** Profile box per active character, lit on its attackStarted events. */
+  private profiles = new Map<string, HTMLElement>();
+  /** Dev verification: when each light-up happened (sim time + real time). */
+  readonly profileLog: { owner: string; attack: string; time: number; at: number }[] = [];
   private shownTimer = '';
   private shownHp = '';
 
@@ -116,6 +120,29 @@ export class BattleScene extends Phaser.Scene {
     this.pauseBtn = at(h('div', 't-small hud-btn click', 'pause'), VIEW.width - space.lg, space.lg, 'right');
     this.pauseBtn.addEventListener('click', () => (this.paused ? this.resume() : this.pause()));
     this.hintEl = at(h('div', 't-hint', 'arrows move    shift slow    esc pause'), VIEW.cx, VIEW.height - 40);
+    // Profile boxes: a centered row below the HP bar, one per active character.
+    const active = registry.filter((e) => (this.roster[e.id] ?? 0) > 0);
+    const PROFILE = 44;
+    const GAP = 12;
+    const rowY = bar.y + bar.h + 46;
+    const rowW = active.length * PROFILE + (active.length - 1) * GAP;
+    this.profiles.clear();
+    active.forEach((e, i) => {
+      const box = at(h('div', 'profile'), VIEW.cx - rowW / 2 + PROFILE / 2 + i * (PROFILE + GAP), rowY);
+      box.style.setProperty('--accent', toCss(e.color));
+      box.append(shape(profileShape(e), e.color, 11));
+      this.profiles.set(e.id, box);
+      screen.append(box);
+    });
+    this.world.bus.on('attackStarted', (ev) => {
+      const box = this.profiles.get(ev.owner);
+      if (!box) return;
+      box.classList.remove('lit');
+      void box.offsetWidth; // restart the fade
+      box.classList.add('lit');
+      if (import.meta.env.DEV) this.profileLog.push({ owner: ev.owner, attack: ev.attack, time: this.world.time, at: performance.now() });
+    });
+
     screen.append(
       this.timerEl,
       at(h('div', 't-small dim', summary || 'no opponents'), space.lg, space.lg, 'left'),
@@ -226,4 +253,9 @@ export class BattleScene extends Phaser.Scene {
       this.time.delayedCall(END_DELAY_MS, () => go(this, 'Results', { outcome: { ...outcome, roster: { ...outcome.roster } } }));
     }
   }
+}
+
+/** Profile icon for a character (the DOM shape helper draws triangle, circle and square). */
+function profileShape(e: CharacterEntry): 'triangle' | 'circle' | 'square' {
+  return e.shape === 'triangle' || e.shape === 'circle' ? e.shape : 'square';
 }
