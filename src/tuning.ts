@@ -38,3 +38,8 @@ export const DESPAWN_FADE_TIME = 0.12;
 export const HIT_SHAKE_MS = 90;
 export const HIT_SHAKE_INTENSITY = 0.006;
 export const HIT_FLASH_MS = 70;
+
+/** Timer mode: seconds to survive to win. */
+export const TIMER_DURATION = 120;
+/** Scene transition fade (ms): short and punchy. */
+export const SCENE_FADE_MS = 140;
