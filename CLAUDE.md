@@ -61,6 +61,11 @@ Keyboard-only bullet-hell. The player dodges as a soul inside a box (Undertale-s
 12. Red belongs to the player (solid red circle). Hazards never use red. Generic bullets are white; KR is magenta.
 13. Characters customise bullets through `onStep`/`onWall` hooks and compose `combat/patterns/` (line, fan, ring, aimed), not through Bullet subclasses or hand-written spawn loops.
 
+## Pixel ratio and HTML UI layer
+- Pixel-ratio rule: the canvas backing store is always displayed CSS size x devicePixelRatio (`render/display.ts`); re-fit on window resize, host resize and ratio changes (matchMedia). The camera maps the 1280x720 layout onto it. Dev-only `?dpr=1.5` fakes the ratio for testing.
+- All UI text (menu, roster, HUD, pause, results) is DOM in `src/ui` (UiLayer + styles from theme tokens), not Phaser text, which blurred under fractional zoom with LINEAR filtering. The overlay copies the canvas rect exactly. Only the dev DebugScene still uses Phaser text.
+- Input rules: scenes own state; the DOM only renders and forwards input. Hover and keyboard share one selection index per screen. Mousedown and wheel are prevented on the overlay, so clicks never take focus or scroll the page. Locked items use a not-allowed cursor and ignore the mouse. Battle movement stays keyboard-only; a quiet "pause" button gives a mouse route.
+
 ## Scene flow
 `Menu` (Timer mode; Wave mode shown as coming soon) → `Roster` (5 UCN-style slots: Prism plus 4 locked placeholders; ←/→ pick a slot, ↑/↓ change level, Z sets all to 0, X sets all to 20, Enter fights, Esc returns to the menu; shows total difficulty) → `Battle` (Director + TimerMode; HUD shows the countdown, HP/KR bar and roster summary; Esc pauses: resume / restart / quit to roster) → `Results` (win/loss, time survived, HP left, levels; R or Enter retries the same roster, Esc goes to the roster with levels kept).
 Transitions are 140 ms fades (`SCENE_FADE_MS`) via `scenes/ui.ts` `go()`/`enter()`, and every screen follows the visual rules (rule 11). Pause skips the fixed step and `FixedLoop.resync()` on resume, so no time is caught up.
@@ -141,7 +146,10 @@ Live: https://iangopen.github.io/untitledbulletgame/ (full loop: menu → roster
 - Restyled menu, roster (no cards: shape, name, level; selected bright with an accent underline; locked = faint outline + "locked"), battle HUD (mono countdown, thin HP bar, quiet hint), pause (hides the battle hint, red dot marker), results (one accent word, two-column stats).
 - Browser-verified at 1920x945 and in an emulated 1920x560 wide container: every screen centered (canvas center equals container center), text crisp; hitbox overlay still exact at zoom 1.313; no console errors. Tests: 125 passing (one test was coupled to the old soul radius and now uses SOUL_RADIUS).
 
+**HTML UI + pixel ratio:** diagnosed the backing store was already CSS x DPR (1680x945 / 2100x1181 / 2520x1418 at 1 / 1.25 / 1.5); the blur was Phaser text textures resampled at fractional positions. UI moved to DOM; mouse and keyboard loops verified locally; overlay aligned exactly at ratios 1/1.25/1.5 and narrow/wide hosts; DebugScene rescaled by 1.5. Ratios were emulated (`?dpr=`), not real browser zoom.
+
 ### Open
+- Confirm sharpness on Ian's real Windows 125/150% display (only emulated here); live-site check of this session not done
 - Real browser-window resizing wasn't tested (the automation window wouldn't resize); container resizing was
 - DebugScene pattern speeds/sizes are still unscaled dev values
 - Rare render-side frame spikes (see above): profile in a normal (non-automated) browser before adding more characters.
