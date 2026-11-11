@@ -2,8 +2,11 @@ import type { World } from '../core/World';
 import { mulberry32 } from '../core/rng';
 import { resolveLevel, type CharacterConfig, type ResolvedAttack, type ResolvedLevel } from './config';
 
-/** Delay before an attack's first shot after it becomes active (s), staggered per attack. */
-const FIRST_SHOT_DELAY = 0.8;
+/**
+ * When an attack's first shot reaches the box after it becomes active (s), staggered per attack.
+ * The first plan is pre-fired (see tick), so this holds even for long off-screen leads.
+ */
+const FIRST_SHOT_DELAY = 1.0;
 const FIRST_SHOT_STAGGER = 0.6;
 /** Guard against a zero cooldown planning forever in one step. */
 const MAX_PLANS_PER_STEP = 16;
@@ -62,6 +65,8 @@ export abstract class Character<A extends string = string, R = Record<string, nu
   /** Game seconds this character has ticked (its own clock for planned spawns). */
   private clock = 0;
   private pending: Pending[] = [];
+  /** Attacks whose first plan has run (later plans shift instead of pre-firing). */
+  private readonly planned = new Set<string>();
 
   constructor(
     protected readonly world: World,
@@ -114,10 +119,20 @@ export abstract class Character<A extends string = string, R = Record<string, nu
           // Arrive on the beat, or as soon as the slowest shot can if the beat is too close.
           // (Only shift when a shot truly needs longer, so the sub-step remainder of t is kept.)
           const need = Math.max(...shots.map((s) => s.lead));
-          const arrive = need > 0 && need > t ? need : t;
-          for (const s of shots) this.pending.push({ at: this.clock + arrive - s.lead, fire: s.fire, plan });
-          t = arrive;
+          if (!this.planned.has(id)) {
+            // First plan: pre-fire. A shot that needs longer than the time left spawns now,
+            // already advanced along its path, so the opening arrives on its beat instead of late.
+            for (const s of shots) {
+              if (s.lead > t) this.preFire(s, s.lead - Math.max(0, t), plan);
+              else this.pending.push({ at: this.clock + t - s.lead, fire: s.fire, plan });
+            }
+          } else {
+            const arrive = need > 0 && need > t ? need : t;
+            for (const s of shots) this.pending.push({ at: this.clock + arrive - s.lead, fire: s.fire, plan });
+            t = arrive;
+          }
         }
+        this.planned.add(id);
         t += p.cooldown ?? 1;
       }
       this.timers[id] = t;
@@ -135,6 +150,20 @@ export abstract class Character<A extends string = string, R = Record<string, nu
       s.fire();
       this.started(s.plan);
     }
+  }
+
+  /** Fire a shot now with its new bullets moved `advance` seconds along their (straight) paths. */
+  private preFire(s: Shot, advance: number, plan: { attack: string; started: boolean }): void {
+    const pool = this.world.pool;
+    const before = new Set(pool.all.filter((b) => b.active));
+    s.fire();
+    for (const b of pool.all) {
+      if (!b.active || before.has(b)) continue;
+      b.x += b.vx * advance;
+      b.y += b.vy * advance;
+      b.snapshot();
+    }
+    this.started(plan);
   }
 
   private started(plan: { attack: string; started: boolean }): void {

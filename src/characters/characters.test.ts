@@ -132,9 +132,12 @@ describe('Prism behaviour', () => {
       const p = new Prism(w);
       p.setLevel(level);
       let row: Bullet[] = [];
+      const opening = new Set<Bullet>();
       for (let i = 0; i < 60 * 12 && row.length === 0; i++) {
         p.tick(STEP);
-        row = w.pool.all.filter((b) => b.active && b.shape === 'triangle' && b.age === 0);
+        // Skip the opening row: it is pre-fired already partway in (see Character.preFire).
+        if (i === 0) w.pool.all.forEach((b) => b.active && opening.add(b));
+        row = w.pool.all.filter((b) => b.active && b.shape === 'triangle' && b.age === 0 && !opening.has(b));
       }
       // Rows can spawn in the same step (battle-start shift); keep the one moving like the first.
       row = row.filter((b) => Math.sign(b.vx) === Math.sign(row[0]!.vx) && Math.sign(b.vy) === Math.sign(row[0]!.vy));
@@ -183,6 +186,25 @@ describe('Prism behaviour', () => {
     console.log(`L5 arrivals (s): ${arrivals.map((t) => t.toFixed(2)).join(' ')}`);
     expect(arrivals.length).toBeGreaterThan(10);
     for (const d of spacing.slice(1)) expect(Math.abs(d - cd)).toBeLessThan(STEP * 2 + 1e-9);
+  });
+  it('the first attack reaches the box about 1 s into a battle (pre-fired) at levels 1, 10 and 20', () => {
+    for (const level of [1, 10, 20]) {
+      const w = new World(640, 369);
+      const p = new Prism(w);
+      p.setLevel(level);
+      let first = -1;
+      for (let i = 0; i < 60 * 5 && first < 0; i++) {
+        p.tick(STEP);
+        w.step(still, STEP);
+        w.soul.iframes = 1;
+        const inside = w.pool.all.some((b) => b.active && Math.abs(b.x) <= w.box.halfWidth && Math.abs(b.y) <= w.box.halfHeight);
+        if (inside) first = w.time;
+      }
+      // eslint-disable-next-line no-console
+      console.log(`L${level}: first projectile reaches the box at ${first.toFixed(3)} s`);
+      expect(first).toBeGreaterThan(0.9);
+      expect(first).toBeLessThan(1.1);
+    }
   });
   it('entering the box never fires a wall hook; leaving it does', () => {
     const w = new World(640, 369);
