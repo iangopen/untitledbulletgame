@@ -37,3 +37,7 @@ The automation browser throttles rAF (~13/s) even in a visible tab, and awaiting
 Settings screen (menu and pause), frame-rate caps as whole divisors of the measured refresh, render quality caps, Show FPS, shake/flash gate, versioned storage key ubg.settings.v1.
 Found: Phaser emits 'ready' before loop.start(), which replaces the loop callback; the limiter intercepts loop.start instead. Using performance.now() for draw gating let a late callback shift a draw by a tick; the rAF timestamp fixed it. Phaser's keyboard queue replays earlier presses within one step; it is now emptied after each DOM event.
 Process slip: a stash-based pre-commit check conflicted on a partially staged file and a bad commit landed locally (never pushed); undone with reset --soft. Verify staged trees by exporting the index (git checkout-index) to a scratch dir with a node_modules junction instead of stashing.
+
+## 2026-11-11 - Projectile types, off-screen spawns, profile boxes
+Projectile kinds (white/blue/orange/KR) decided in combat/projectile.ts from Soul.moving; Prism all white; attacks start off screen and are planned ahead to keep their beat (Character base Shots + attackStarted); constant 33 px volley spacing; profile boxes; input ignored during fades.
+Found: the bullet layer's geometry mask hid the off-screen approach, so it was removed. Battle start planning can spawn two rows in one step (their leads exceed the time left); arrivals still keep a full cooldown apart, which broke an old test that assumed a 0.81 s spawn.
