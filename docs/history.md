@@ -23,3 +23,7 @@ Each commit verified to build on its own (rule added to CLAUDE.md).
 ## 2026-11-11 - Phase 5 "Dynamic box"
 Box tracks (size/position/rotation) on the fixed step, squeeze with anchor and content shift, min size clamp, damaging walls via Soul.damage, box/wall events, DebugScene box controls.
 Gotcha: editing a CRLF file with Python str.replace silently missed multi-line matches, and writing with the default Windows encoding turned a new degree sign into a lone cp1252 byte. Use the Edit tool, or open files with encoding='utf-8' and normalise newlines.
+
+## 2026-11-11 - Visual pass
+1280x720 view at device resolution, WORLD_SCALE 1.5 gameplay scaling, Inter + JetBrains Mono self-hosted, minimal restyle of every screen.
+Found: #game flex centering plus Phaser CENTER_BOTH double-centered the canvas (the "roster off-center" complaint). Resize handler moved from rAF to a timer debounce plus ResizeObserver plus scale.refresh(), because container resizes don't trigger Phaser's refit.

@@ -51,7 +51,13 @@ Keyboard-only bullet-hell. The player dodges as a soul inside a box (Undertale-s
 8. Bullets come from `BulletPool`; never `new Bullet()` inside the game loop.
 9. Colors come from `render/theme.ts`. Each character owns one accent color; bullets must stay readable against the box at all levels.
 10. Exact hitboxes: what you see is what hits you. Every collision shape equals its drawn shape and size. Drawing and collision both derive from the same geometry functions in `combat/Bullet.ts` (`bulletCircle`/`bulletRect`/`bulletTriangle`), and the soul's drawn radius is its hit radius. Never add a separate "hitbox size". The spawn pop scales both together; despawn fades are visual-only ghosts that never collide.
-11. Visual style (in the spirit of Just Shapes & Beats): near-black background, flat bright solid shapes with crisp edges, no textures or images, thin clean box border. Motion is short and punchy: quick scale-pop on spawn, fast fade on despawn, brief flash and small shake when the soul is hit.
+11. Visual style (in the spirit of Just Shapes & Beats): near-black background, flat bright solid shapes with crisp edges, no textures or images, thin clean lines, lots of empty space, one accent per screen. Motion is short and punchy: quick scale-pop on spawn, fast fade on despawn, brief flash and small shake when the soul is hit, 140 ms scene fades.
+    - Resolution: every scene lays out in a fixed 1280x720 virtual view (`VIEW` in theme.ts). `render/display.ts` sizes the canvas to the real device pixels it occupies (fit-to-container x devicePixelRatio) and each scene's camera zooms the view to fit (`applyView`, called by `enter()`). Nothing is CSS-upscaled, so it stays sharp at any window size or DPI; text is rasterised at the same scale and re-rasterised on resize. Phaser `Scale.FIT` + `CENTER_BOTH` does the centering; the `#game` container must not also center (that double-centered the canvas before).
+    - Never lay out with `this.scale.width/height` (that's device pixels); use `VIEW`.
+    - Typography: one UI face, Inter (self-hosted via `@fontsource/inter`, latin 400/600), and JetBrains Mono (`@fontsource/jetbrains-mono`) only for numbers (levels, timer, HP, stats). Fonts load before the game boots. Sentence case or lowercase; no all-caps labels.
+    - Scales in `theme.ts`: `type` (hint 15, small 17, body 22, label 26, number 44, title 64), `space` (xs 6, sm 12, md 24, lg 48, xl 96), `line` (thin 2, box 2, danger 6). Colors: `text`, `textDim` for secondary, `textMuted` for hints, `locked` for placeholders.
+    - Screen patterns: selection = full brightness plus a small red dot (menus) or a thin accent underline (roster); everything else dims. One quiet controls line at the bottom (`hint()`). No boxed cards or panels.
+    - Gameplay sizes are separate from UI sizes: `tuning.ts` writes every gameplay distance, size and speed as `px(original)` with `WORLD_SCALE = 1.5` (720/480), so the game feels exactly as it did at 640x480.
 12. Red belongs to the player (solid red circle). Hazards never use red. Generic bullets are white; KR is magenta.
 13. Characters customise bullets through `onStep`/`onWall` hooks and compose `combat/patterns/` (line, fan, ring, aimed), not through Bullet subclasses or hand-written spawn loops.
 
@@ -75,7 +81,7 @@ src/
   director/    Director, interactions, modes/ (TimerMode, WaveMode)
   abilities/   passives/, actives/
   data/        save
-  render/      theme, BattleView
+  render/      theme (palette + UI scales + VIEW), display (crisp DPR scaling), BattleView
 ```
 
 ## Locked game decisions
@@ -129,7 +135,15 @@ Live: https://iangopen.github.io/untitledbulletgame/ (full loop: menu → roster
 - Browser-verified in DebugScene: resized and 30°-rotated boxes with bullets, and amber/KR damaging walls. Slow squeeze: the soul pressed at x=144 was pushed to x=104 and never got closer than 6.0 px (its radius) to the wall. Fast squeeze (80 px in 0.12 s): the wall went from world x 170 to 250 and the soul from 220 to 256, never closer than 6.0 px. Instant 2000 px squeeze clamped to width 60 with the soul inside. A damaging wall hit at t=5.88 and t=6.88 (i-frames blocked 105 contacts in between). Prism 20 with the box spinning through 782° and breathing between widths 208 and 300 for 40 s: 244 wall events, all 0 to 3.25 px past the real wall (at most one step of travel), 23 splits; peak 43 bullets; frame median 0.3 ms, p99 2.9 ms, 2/2400 frames over 16.7 ms (same rare render-side spikes as before). Pause froze box motion for 3 s; resume continued without a jump; retry restored the default box and safe walls.
 - Normal play is unchanged: no character moves the box yet.
 
+**Visual pass:**
+- 1280x720 virtual view, rendered at device resolution with camera zoom (canvas pixels = displayed pixels; e.g. 1680x945 canvas at 1680x945 CSS in a 1920x945 window), refitted on window or container resize. The canvas is centered exactly (it used to sit 60 px right because of double centering).
+- Gameplay scaled by WORLD_SCALE 1.5 (old -> new): soul speed 170 -> 255 px/s, soul radius 6 -> 9, box 300x220 -> 450x330, min box 60x60 -> 90x90, despawn margin 48 -> 72, wall contact 0.5 -> 0.75, Prism volley 70-145 -> 105-217.5 px/s, beam 130-200 -> 195-300 px/s, beam length 34-40 -> 51-60, volley size 6 -> 9, beam thickness 4 -> 6, prism radius 28 -> 42, spawn offsets 10/12/20 -> 15/18/30, default bullet radius 6 -> 9. Timings, damage, HP, i-frames and KR are unchanged. Crossing the box still takes 300/170 = 450/255 = 1.76 s.
+- Restyled menu, roster (no cards: shape, name, level; selected bright with an accent underline; locked = faint outline + "locked"), battle HUD (mono countdown, thin HP bar, quiet hint), pause (hides the battle hint, red dot marker), results (one accent word, two-column stats).
+- Browser-verified at 1920x945 and in an emulated 1920x560 wide container: every screen centered (canvas center equals container center), text crisp; hitbox overlay still exact at zoom 1.313; no console errors. Tests: 125 passing (one test was coupled to the old soul radius and now uses SOUL_RADIUS).
+
 ### Open
+- Real browser-window resizing wasn't tested (the automation window wouldn't resize); container resizing was
+- DebugScene pattern speeds/sizes are still unscaled dev values
 - Rare render-side frame spikes (see above): profile in a normal (non-automated) browser before adding more characters.
 - Graphics redraws every path each frame (~13 ms/frame at 900 bullets in the Phase 2 stress test); fine at Prism's ~45.
 - Prism numbers are first guesses; tune by feel. Open design calls: prism harmless?, refracted beams split?, prism relocation rate.
