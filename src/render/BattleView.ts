@@ -76,13 +76,14 @@ export class BattleView {
     b.a = src.a;
     b.b = src.b;
     b.type = src.type;
+    b.color = src.color;
     b.noPop = true;
     g.t = 0;
     g.live = true;
   }
 
   private colorOf(b: Bullet): number {
-    return b.type === 'kr' ? theme.bulletKr : theme.bulletNormal;
+    return b.type === 'kr' ? theme.bulletKr : b.color || theme.bulletNormal;
   }
 
   /** Puts a bullet's exact shape in world space. Returns vertex count in `w`, or 0 for a circle (center tmp, radius c.r). */
@@ -158,6 +159,21 @@ export class BattleView {
         continue;
       }
       this.fillBullet(bg, gh.b, 0.6 * (1 - gh.t / DESPAWN_FADE_TIME));
+    }
+    // Props (non-damaging): translucent fill + thin outline so they never read as solid hazards.
+    for (const p of this.world.props) {
+      const k = (2 * Math.PI) / 3;
+      for (let i = 0; i < 3; i++) {
+        this.tmp2.x = p.x + Math.cos(p.rotation + i * k) * p.r;
+        this.tmp2.y = p.y + Math.sin(p.rotation + i * k) * p.r;
+        box.toWorld(this.tmp2, this.w[i]);
+      }
+      bg.fillStyle(p.color, theme.propFillAlpha);
+      this.path(bg, 3);
+      bg.fillPath();
+      bg.lineStyle(1.5, p.color, 0.9);
+      this.path(bg, 3);
+      bg.strokePath();
     }
     for (const b of pool.all) if (b.active) this.fillBullet(bg, b, 1);
 

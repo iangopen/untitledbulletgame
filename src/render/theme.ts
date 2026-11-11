@@ -16,6 +16,10 @@ export const theme = {
   kr: 0xff2bd6,
   bulletNormal: 0xf4f4f8,
   bulletKr: 0xff2bd6,
+  /** Character accent colors (one per character; never red). */
+  prism: 0x3de8ff,
+  /** Non-damaging props (e.g. refraction prism) draw as translucent fill + outline. */
+  propFillAlpha: 0.18,
   /** Dev hitbox overlay. */
   hitboxOutline: 0x39ff88,
 } as const;
