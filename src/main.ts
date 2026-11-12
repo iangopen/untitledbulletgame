@@ -39,7 +39,12 @@ async function boot(): Promise<void> {
     // The canvas can be transparent so the battle HUD (in the under-layer) shows beneath bullets;
     // every camera still clears to the background color except the battle's (see BattleScene).
     transparent: true,
+    // Linear filtering for textures (cached bullet looks are pre-anti-aliased)...
     antialias: true,
+    // ...but no multisampling of the whole canvas: every rotated or curved shape is a cached
+    // anti-aliased texture (render/LookCache.ts), and 4x MSAA of the full-resolution backbuffer was
+    // the largest single cost per frame (about 3.5 ms median at 3214x1808, with nothing drawn).
+    antialiasGL: false,
     // FIT + CENTER_BOTH keeps the 16:9 view centered; the canvas is already device-pixel sized (see display.ts).
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     // Flow: Menu -> Roster -> Battle -> Results (-> Battle retry | Roster). First scene listed starts.
