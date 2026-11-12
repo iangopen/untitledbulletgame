@@ -20,14 +20,15 @@ describe('The Warden config', () => {
     expect(validateConfig(wardenConfig)).toEqual([]);
     expect(registry[3]).toMatchObject({ id: 'warden', shape: 'golem', maxLevel: 20 });
   });
-  it('punch 1-20; spin joins at 6', () => {
+  it('punch 1-20; spin joins at 6; rip at 15', () => {
     for (const l of [1, 5]) expect(attacksAt(l)).toEqual(['punch']);
-    for (const l of [6, 14, 15, 20]) expect(attacksAt(l)).toEqual(['punch', 'spin']);
+    for (const l of [6, 14]) expect(attacksAt(l)).toEqual(['punch', 'spin']);
+    for (const l of [15, 20]) expect(attacksAt(l)).toEqual(['punch', 'rip', 'spin']);
   });
   it('difficulty never decreases with level, per parameter', () => {
-    const up = ['distance', 'vertical', 'speed', 'duration', 'reverse'];
+    const up = ['distance', 'vertical', 'speed', 'duration', 'reverse', 'gap', 'hold', 'either'];
     const down = ['cooldown', 'windup', 'back'];
-    for (const atk of ['punch', 'spin'] as const) {
+    for (const atk of ['punch', 'spin', 'rip'] as const) {
       let prev: Record<string, number> | undefined;
       for (let l = 1; l <= 20; l++) {
         const a = resolveLevel(wardenConfig, l).attacks[atk];
@@ -46,7 +47,12 @@ describe('The Warden config', () => {
   it('a punch and its return fit inside the cooldown; a spin and its return fit too', () => {
     const r = wardenConfig.rules;
     for (let l = 1; l <= 20; l++) {
-      const { punch, spin } = resolveLevel(wardenConfig, l).attacks;
+      const { punch, spin, rip } = resolveLevel(wardenConfig, l).attacks;
+      if (rip) {
+        const tail = r.pullTime + rip.hold! + 2 * (rip.windup! + r.lungeTime) + r.mergeTime + rip.back! + r.shoveTime + r.fistLinger;
+        expect(tail, `rip L${l}`).toBeLessThanOrEqual(rip.cooldown!);
+        expect(tail, `rip L${l} fits a phase`).toBeLessThanOrEqual(r.phaseLength);
+      }
       expect(punch!.back! + r.shoveTime + punch!.windup! + r.lungeTime, `L${l}`).toBeLessThanOrEqual(punch!.cooldown!);
       if (spin) expect(spin.duration! + r.spinReturn, `L${l}`).toBeLessThanOrEqual(spin.cooldown!);
     }
@@ -116,7 +122,7 @@ describe('The Warden behaviour', () => {
     const expected: Record<number, string[]> = {
       1: ['punch@0.0', 'breather@8.0', 'punch@9.0', 'breather@17.0', 'punch@18.0'],
       10: ['punch@0.0', 'breather@8.0', 'spin@9.0', 'breather@17.0', 'punch@18.0'],
-      20: ['punch@0.0', 'breather@8.0', 'spin@9.0', 'breather@17.0', 'punch@18.0'],
+      20: ['punch@0.0', 'breather@8.0', 'spin@9.0', 'breather@17.0', 'rip@18.0'],
     };
     for (const level of [1, 10, 20]) {
       for (const input of [STILL, { dx: 1, dy: 0, slow: false }, { dx: -1, dy: 1, slow: false }]) {

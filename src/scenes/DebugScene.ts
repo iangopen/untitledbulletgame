@@ -3,6 +3,8 @@ import { SWORD_FLAGS, SWORD_FORM } from '../characters/ulysses/ulysses.config';
 import { installInteractions } from '../director/interactions';
 import { Mortimer } from '../characters/mortimer/Mortimer';
 import { Warden } from '../characters/warden/Warden';
+import { wardenConfig } from '../characters/warden/warden.config';
+import { resolveLevel } from '../characters/config';
 import Phaser from 'phaser';
 import { PROJECTILE_TYPES } from '../combat/projectile';
 import { World } from '../core/World';
@@ -28,7 +30,7 @@ import type { CharacterHandle } from '../characters/Character';
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
  * Mortimer (level 20 params, fired now from off screen): J snowfall · K snowball roll · L blizzard
  * Ulysses (level 20 params): U summon · Y axe swing · O sword rain
- * The Warden (level 20 params): , punch (and the return) · / spin
+ * The Warden (level 20 params): , punch (and the return) · / spin · [ rip apart · ] merge punch · \ re-center
  * Combos: X sword through a refraction prism (Prism + Ulysses) · . toggle Mortimer's blizzard phase (swords sync)
  */
 export class DebugScene extends Phaser.Scene {
@@ -82,7 +84,7 @@ export class DebugScene extends Phaser.Scene {
     this.readout = this.add.text(16, 12, '', { ...mono, color: toCss(theme.text) }).setResolution(renderScale());
     this.boxText = this.add.text(16, 80, '', { ...mono, color: toCss(theme.textDim) }).setResolution(renderScale());
     this.add
-      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  U/Y/O ulysses  , / warden  X . combos  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
+      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  U/Y/O ulysses  , / [ ] \ warden  X . combos  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
       .setOrigin(0.5)
       .setResolution(renderScale());
 
@@ -111,25 +113,26 @@ export class DebugScene extends Phaser.Scene {
     kb.on('keydown-I', () => (this.invincible = !this.invincible));
     kb.on('keydown-H', () => (this.view.showHitboxes = !this.view.showHitboxes));
     kb.on('keydown-BACKTICK', () => this.scene.start('Battle'));
-    const box = this.world.box;
+    // Always the soul's box (it changes when the box is ripped apart or merged).
+    const W = this.world;
     const box_: Record<string, () => void> = {
-      Q: () => box.rotateBy(-Math.PI / 6, 0.4),
-      E: () => box.rotateBy(Math.PI / 6, 0.4),
-      R: () => box.rotateBy(Math.PI / 2, 0.5),
-      T: () => box.rotateBy(Math.PI, 0.8),
+      Q: () => W.box.rotateBy(-Math.PI / 6, 0.4),
+      E: () => W.box.rotateBy(Math.PI / 6, 0.4),
+      R: () => W.box.rotateBy(Math.PI / 2, 0.5),
+      T: () => W.box.rotateBy(Math.PI, 0.8),
       F: () => {
         this.small = !this.small;
-        const d = box.defaults;
-        box.resizeTo(this.small ? px(180) : d.width, this.small ? px(120) : d.height, 0.6);
+        const d = W.home;
+        W.box.resizeTo(this.small ? px(180) : d.width, this.small ? px(120) : d.height, 0.6);
       },
       G: () => {
-        const d = box.defaults;
+        const d = W.home;
         const offs = [[60, -30], [-60, 30], [0, 0]] as const;
         const [ox, oy] = offs[this.moveIdx++ % offs.length]!;
-        box.moveTo(d.x + px(ox), d.y + px(oy), 0.6);
+        W.box.moveTo(d.x + px(ox), d.y + px(oy), 0.6);
       },
-      V: () => box.squeezeWall('left', px(80), 0.12),
-      B: () => box.squeezeWall('right', px(80), 1.5),
+      V: () => W.box.squeezeWall('left', px(80), 0.12),
+      B: () => W.box.squeezeWall('right', px(80), 1.5),
       N: () => this.cycleWalls(),
       M: () => (this.chaos = !this.chaos),
       P: () => this.prism.setLevel(this.prism.level === 20 ? 0 : 20),
@@ -141,6 +144,11 @@ export class DebugScene extends Phaser.Scene {
       O: () => this.ulysses.fireNow('rain', 20),
       COMMA: () => this.warden.fireNow('punch', 20),
       FORWARD_SLASH: () => this.warden.fireNow('spin', 20),
+      // Rip and merge on demand (level 20 params): [ rips the box apart, ] punches the left half
+      // into the right (merge, offset), BACKSLASH punches the merged box back to center.
+      OPEN_BRACKET: () => this.warden.ripNow(this.wardenParams('rip')),
+      CLOSED_BRACKET: () => this.warden.mergeNow(this.wardenParams('rip'), 0),
+      BACK_SLASH: () => this.warden.recenterNow(this.wardenParams('rip')),
       X: () => this.prismCombo(),
       PERIOD: () => {
         this.blizzard = !this.blizzard;
@@ -151,7 +159,8 @@ export class DebugScene extends Phaser.Scene {
       Z: () => {
         this.chaos = false;
         this.small = false;
-        box.reset();
+        W.resetBoxes();
+        W.box.reset();
       },
     };
     for (const [key, fn] of Object.entries(box_)) kb.on(`keydown-${key}`, fn);
@@ -246,6 +255,10 @@ export class DebugScene extends Phaser.Scene {
         a: shape === 'beam' ? px(16) : px(4), b: px(2), spin: 1.5, damage: 1,
       });
     }
+  }
+
+  private wardenParams(id: 'rip') {
+    return resolveLevel(wardenConfig, 20).attacks[id]!;
   }
 
   update(): void {

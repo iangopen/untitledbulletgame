@@ -43,6 +43,7 @@ describe('HUD bands', () => {
     const w = new World(VIEW.cx, VIEW.cy + 9);
     const d = new Director(w, { prism: 20, mortimer: 20, ulysses: 20, warden: 20 }, new TimerMode(60));
     const seen = new Set<Bullet>();
+    let splitSteps = 0, boxInBand = 0;
     let spawns = 0, onScreenSpawns = 0, spawnInBand = 0, goldSteps = 0, goldInBand = 0, passingInBand = 0;
     // The Director's step, split so spawns are measured where they spawn (before the world moves them).
     const tick = () => d.characters.forEach((c) => c.tick(STEP));
@@ -51,6 +52,13 @@ describe('HUD bands', () => {
       measure();
       w.step({ dx: 0, dy: 0, slow: false }, STEP);
       w.soul.iframes = 1;
+      // Every box (two while The Warden has it ripped apart) stays between the bands.
+      if (w.boxes.length > 1) splitSteps++;
+      for (const bx of w.boxes) {
+        const hx = bx.halfWidth * Math.abs(Math.cos(bx.rotation)) + bx.halfHeight * Math.abs(Math.sin(bx.rotation));
+        const hy = bx.halfWidth * Math.abs(Math.sin(bx.rotation)) + bx.halfHeight * Math.abs(Math.cos(bx.rotation));
+        if (bx.y - hy < hud.top.y + hud.top.height || bx.y + hy > hud.bottom.y || bx.x - hx < 0 || bx.x + hx > VIEW.width) boxInBand++;
+      }
     }
     function measure(): void {
       for (const b of w.pool.all) {
@@ -71,9 +79,11 @@ describe('HUD bands', () => {
       for (const b of [...seen]) if (!b.active) seen.delete(b);
     }
     // eslint-disable-next-line no-console
-    console.log(`HUD bands, all four at 20 for 40 s: ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band`);
+    console.log(`HUD bands, all four at 20 for 40 s: ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band; split ${(splitSteps / 60).toFixed(1)} s, box steps in a band or off screen ${boxInBand}`);
     expect(spawnInBand).toBe(0);
     expect(goldInBand).toBe(0);
+    expect(splitSteps).toBeGreaterThan(60 * 3); // the rip at 18 s is covered
+    expect(boxInBand).toBe(0);
   });
 
   it('HP bar color is distinct from every projectile and forming color', () => {

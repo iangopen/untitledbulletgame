@@ -2,7 +2,7 @@ import type { CharacterConfig } from '../config';
 import { px } from '../../tuning';
 import { makeForm, type CompositeForm } from '../../combat/composite';
 
-export type WardenAttack = 'punch' | 'spin';
+export type WardenAttack = 'punch' | 'spin' | 'rip';
 
 export interface WardenRules {
   /** Seconds each phase lasts (every punch, return and spin finishes inside it). */
@@ -26,6 +26,9 @@ export interface WardenRules {
   /** Spin: largest swing angle (rad), further limited so the turned box stays clear of the HUD bands; seconds to turn back to 0 at the end. */
   spinMaxAngle: number;
   spinReturn: number;
+  /** Rip: seconds the hands take to pull the halves apart; seconds a merge punch takes to close the gap. */
+  pullTime: number;
+  mergeTime: number;
 }
 
 /**
@@ -37,6 +40,9 @@ export interface WardenRules {
  *  punch: cooldown s (impact to impact), windup s (fist forming and drawing back; lower = harder),
  *         distance px (shove length, clamped to the room on screen), back s (impact to the return
  *         punch; lower = harder), vertical (chance a punch is vertical)
+ *  rip:   cooldown s, windup s (hands / merge fist / re-center fist; lower = harder), gap px (between
+ *         the halves, clamped to the room on screen), hold s (time split), either (chance the merge
+ *         punch hits the right box instead of the left), back s (merge to re-center punch)
  *  spin:  cooldown s, speed rad/s (swing speed), duration s (how long the spin lasts), reverse
  *         (chance a swing turns back early)
  */
@@ -65,13 +71,14 @@ export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
       attacks: {
         punch: { cooldown: [2.2, 1.6], windup: [0.55, 0.4], distance: [px(170), px(230)], back: [0.9, 0.6], vertical: [0.3, 0.5] },
         spin: { cooldown: [3.6, 3.6], speed: [1.8, 2.6], duration: [2.2, 3.0], reverse: [0.3, 0.5] },
+        rip: { cooldown: [7.5, 7.0], windup: [0.7, 0.5], gap: [px(70), px(120)], hold: [2.5, 3.5], either: [0, 0.5], back: [0.9, 0.6] },
       },
     },
   ],
   rules: {
     phaseLength: 8,
     breather: 1,
-    phaseOrder: ['punch', 'spin'],
+    phaseOrder: ['punch', 'spin', 'rip'],
     fistGap: px(3),
     fistPull: px(8),
     lungeTime: 0.08,
@@ -81,6 +88,8 @@ export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
     minShoveFraction: 0.35,
     spinMaxAngle: 0.6,
     spinReturn: 0.4,
+    pullTime: 0.35,
+    mergeTime: 0.3,
   },
 };
 
@@ -101,3 +110,18 @@ export const FIST_FORM: CompositeForm = makeForm([
 ]);
 /** Fist depth from the knuckles' front to the back of the wrist (px). */
 export const FIST_DEPTH = 48.5;
+
+/**
+ * An open rocky hand for the rip, pointing +x (fingers toward the box), origin at the fingertips'
+ * front: four finger blocks, a palm, a thumb, a wrist and a rock chip. Never collides (decor).
+ */
+export const HAND_FORM: CompositeForm = makeForm([
+  { kind: 'rect', x: -30, y: 0, hw: 11, hh: 21 }, // palm
+  { kind: 'rect', x: -9.5, y: -15.75, hw: 9.5, hh: 3.75 }, // fingers
+  { kind: 'rect', x: -9.5, y: -5.25, hw: 9.5, hh: 3.75 },
+  { kind: 'rect', x: -9.5, y: 5.25, hw: 9.5, hh: 3.75 },
+  { kind: 'rect', x: -9.5, y: 15.75, hw: 9.5, hh: 3.75 },
+  { kind: 'rect', x: -22, y: 25, hw: 8, hh: 3.5, rot: -0.5 }, // thumb
+  { kind: 'rect', x: -44, y: 0, hw: 4.5, hh: 13 }, // wrist
+  { kind: 'tri', ax: -40, ay: -21, bx: -26, by: -21, cx: -34, cy: -27 }, // rock chip
+]);
