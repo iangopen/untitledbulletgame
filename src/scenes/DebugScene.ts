@@ -12,9 +12,9 @@ import Phaser from 'phaser';
 import { PROJECTILE_TYPES } from '../combat/projectile';
 import { World } from '../core/World';
 import { BattleView } from '../render/BattleView';
-import { VIEW, fonts, theme, toCss, type } from '../render/theme';
-import { applyView, renderScale } from '../render/display';
-import { ui } from '../ui/UiLayer';
+import { VIEW, theme } from '../render/theme';
+import { at, h, replay, shape } from '../ui/dom';
+import { enter, go, mountScreen } from './ui';
 import { px } from '../tuning';
 import { FixedLoop } from './FixedLoop';
 import { aimed, fan, line, ring } from '../combat/patterns';
@@ -22,11 +22,16 @@ import type { Wall } from '../combat/Bullet';
 import { STEP } from '../core/Clock';
 import { WALLS } from '../core/Box';
 import { WALL_DAMAGE } from '../tuning';
-import { characterById, registry } from '../characters/registry';
+import { attacksOf, registry } from '../characters/registry';
 import type { CharacterHandle } from '../characters/Character';
 
 /**
- * DEV ONLY. Fire each pattern on demand and watch counts and step time.
+ * Debug sandbox (every build; Menu -> Debug). A template box with the soul and a DOM panel:
+ * character list, that character's attacks, level 1-20, fire (Character.fireNow), a phase-cycle
+ * toggle (the character's normal schedule at the chosen level), invincible / hitboxes / HUD bands
+ * toggles, clear bullets, back. One selection state: Tab / Shift+Tab move, PgUp / PgDn change the
+ * focused list or value, Enter uses it; hover and click do the same. Esc or backtick: back to the menu.
+ * The old dev keys still work as shortcuts:
  * 1 line · 2 fan · 3 ring · 4 aimed · 5 spinning rects · 6 splitting beams (wall hook) · 9 one bullet of each projectile type
  * 7 KR ring · 8 bouncing triangles · 0 stress (+300) · C clear · I invincible · H hitboxes · ` back
  * Box: Q/E rotate -/+30 deg · R +90 · T +180 · F resize small/default · G move · V fast squeeze left
@@ -42,7 +47,8 @@ export class DebugScene extends Phaser.Scene {
   private world!: World;
   private view!: BattleView;
   private loop!: FixedLoop;
-  private readout!: Phaser.GameObjects.Text;
+  private readout!: HTMLElement;
+  private readoutText = '';
   private invincible = false;
   private edgeIdx = 0;
   private stepSamples: number[] = [];
@@ -51,13 +57,25 @@ export class DebugScene extends Phaser.Scene {
   private wallMode = 0;
   private chaos = false;
   private chaosT = 0;
-  private boxText!: Phaser.GameObjects.Text;
+  private chars: CharacterHandle[] = [];
   private prism!: CharacterHandle;
   private mortimer!: Mortimer;
   private ulysses!: Ulysses;
   private warden!: Warden;
   private ember!: Ember;
   private blizzard = false;
+  /** Sandbox state: chosen character / attack, level, phase cycle on, focused row, panel elements. */
+  private charIdx = 0;
+  private attackIdx = 0;
+  private level = 20;
+  private cycling = false;
+  private focus = 0;
+  private panelSig = '';
+  private rows: { kind: 'list' | 'value' | 'button'; els: HTMLElement[]; change?: (d: number) => void; use?: () => void }[] = [];
+  private attackBox!: HTMLElement;
+  private levelEl!: HTMLElement;
+  private fireLabel!: HTMLElement;
+  private msg = '';
 
   constructor() {
     super('Debug');
@@ -81,39 +99,34 @@ export class DebugScene extends Phaser.Scene {
   }
 
   create(): void {
-    applyView(this);
-    ui.clear(); // dev scene uses Phaser text; no HTML screen
-    const { width, height } = VIEW;
+    enter(this);
     this.world = new World(VIEW.cx, VIEW.cy + px(6));
     this.view = new BattleView(this, this.world);
     this.loadout = { active: 'dash', passive: null };
     equipLoadout(this.world, this.loadout);
     this.view.showHitboxes = true;
-    this.prism = characterById('prism')!.create(this.world);
-    this.mortimer = new Mortimer(this.world, 2);
-    this.ulysses = new Ulysses(this.world, 3);
-    this.warden = new Warden(this.world, 4);
-    this.ember = new Ember(this.world, 5);
+    this.view.showBands = false;
+    this.invincible = false;
+    this.cycling = false;
+    this.msg = '';
+    // One instance of every registered character, at level 0 (fireNow works at any level).
+    this.chars = registry.map((e) => e.create(this.world));
+    const byId = (id: string) => this.chars[registry.findIndex((e) => e.id === id)]!;
+    this.prism = byId('prism');
+    this.mortimer = byId('mortimer') as Mortimer;
+    this.ulysses = byId('ulysses') as Ulysses;
+    this.warden = byId('warden') as Warden;
+    this.ember = byId('ember') as Ember;
     // Every combo rule, as if all characters were active, so X and . can show them.
     const offCombos = installInteractions(this.world, new Set(registry.map((e) => e.id)));
     this.blizzard = false;
     this.events.once('shutdown', () => {
-      this.prism.dispose();
-      this.mortimer.dispose();
-      this.ulysses.dispose();
-      this.warden.dispose();
-      this.ember.dispose();
+      for (const c of this.chars) c.dispose();
       offCombos();
     });
     this.loop = new FixedLoop(this);
     this.stepSamples = [];
-    const mono = { fontFamily: fonts.mono, fontSize: `${type.hint}px`, color: toCss(theme.textDim) };
-    this.readout = this.add.text(16, 12, '', { ...mono, color: toCss(theme.text) }).setResolution(renderScale());
-    this.boxText = this.add.text(16, 80, '', { ...mono, color: toCss(theme.textDim) }).setResolution(renderScale());
-    this.add
-      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  U/Y/O ulysses  , / [ ] \ warden  ; \' - ember  X . combos  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
-      .setOrigin(0.5)
-      .setResolution(renderScale());
+    this.buildPanel();
 
     const kb = this.input.keyboard!;
     const fire: Record<string, () => void> = {
@@ -139,7 +152,19 @@ export class DebugScene extends Phaser.Scene {
     kb.on('keydown-C', () => this.world.pool.clear());
     kb.on('keydown-I', () => (this.invincible = !this.invincible));
     kb.on('keydown-H', () => (this.view.showHitboxes = !this.view.showHitboxes));
-    kb.on('keydown-BACKTICK', () => this.scene.start('Battle'));
+    kb.on('keydown-BACKTICK', () => go(this, 'Menu'));
+    kb.on('keydown-ESC', () => go(this, 'Menu'));
+    kb.on('keydown-TAB', (e: KeyboardEvent) => {
+      e.preventDefault();
+      this.setFocus(this.focus + (e.shiftKey ? -1 : 1), true);
+    });
+    kb.on('keydown-PAGE_UP', () => this.rows[this.focus]!.change?.(-1));
+    kb.on('keydown-PAGE_DOWN', () => this.rows[this.focus]!.change?.(1));
+    kb.on('keydown-ENTER', () => {
+      const r = this.rows[this.focus]!;
+      if (r.use) r.use();
+      else r.change?.(1);
+    });
     // Always the soul's box (it changes when the box is ripped apart or merged).
     const W = this.world;
     const box_: Record<string, () => void> = {
@@ -207,7 +232,182 @@ export class DebugScene extends Phaser.Scene {
       warden: () => this.warden,
       prismCombo: () => this.prismCombo(),
       setInvincible: (v: boolean) => (this.invincible = v),
+      sandbox: {
+        choose: (id: string, attack?: string) => {
+          this.chooseChar(registry.findIndex((e) => e.id === id));
+          if (attack) this.attackIdx = Math.max(0, attacksOf(registry[this.charIdx]!).findIndex((a) => a.id === attack));
+          this.renderPanel(true);
+        },
+        setLevel: (lv: number) => this.changeLevel(lv - this.level),
+        fire: () => this.fireChosen(),
+        cycle: () => this.toggleCycle(),
+        state: () => ({ char: registry[this.charIdx]!.id, attack: attacksOf(registry[this.charIdx]!)[this.attackIdx]?.id, level: this.level, cycling: this.cycling, focus: this.focus, msg: this.msg }),
+      },
     };
+  }
+
+  /** Sandbox panel (DOM): left = characters and attacks, right = level, fire, toggles, clear, back. */
+  private buildPanel(): void {
+    const L = 40;
+    const R = 912;
+    const screen = h('div');
+    this.rows = [];
+    const row = (kind: 'list' | 'value' | 'button', els: HTMLElement[], change?: (d: number) => void, use?: () => void) => {
+      const i = this.rows.length;
+      this.rows.push({ kind, els, change, use });
+      for (const el of els) el.addEventListener('mouseenter', () => this.setFocus(i));
+      return i;
+    };
+    const button = (label: string, y: number, use: () => void, cls = 't-body') => {
+      const el = at(h('div', `opt dbg ${cls} click`), R, y, 'left');
+      el.append(h('span', 'dot'), h('span', 'k', label), h('span', 'v'));
+      el.addEventListener('click', use);
+      screen.append(el);
+      row('button', [el], undefined, use);
+      return el;
+    };
+
+    screen.append(at(h('div', 't-label', 'Debug'), L, 56, 'left'), at(h('div', 't-small section', 'character'), L, 116, 'left'));
+    const charEls = registry.map((e, i) => {
+      const el = at(h('div', 'opt dbg t-body click'), L + 18, 152 + i * 36, 'left');
+      el.append(h('span', 'dot'), shape(e.shape, e.color, 9), h('span', '', e.name));
+      el.addEventListener('click', () => this.chooseChar(i));
+      screen.append(el);
+      return el;
+    });
+    row('list', charEls, (d) => this.chooseChar((this.charIdx + d + registry.length) % registry.length));
+    const charsEnd = 152 + registry.length * 36;
+    screen.append(at(h('div', 't-small section', 'attack'), L, charsEnd + 22, 'left'));
+    this.attackBox = h('div');
+    this.attackBox.style.cssText = `position:absolute;left:0;top:${charsEnd + 58}px;width:0;height:0`;
+    screen.append(this.attackBox);
+    row('list', [this.attackBox], (d) => {
+      const n = attacksOf(registry[this.charIdx]!).length;
+      this.attackIdx = (this.attackIdx + d + n) % n;
+      this.renderPanel(true);
+    });
+
+    // Level ‹ n ›
+    const lv = at(h('div', 'opt dbg t-body click'), R, 152, 'left');
+    const down = h('span', 'arrow click', '‹');
+    const up = h('span', 'arrow click', '›');
+    this.levelEl = h('span', 'v mono');
+    lv.append(h('span', 'dot'), h('span', '', 'level'), down, this.levelEl, up);
+    down.addEventListener('click', () => this.changeLevel(-1));
+    up.addEventListener('click', () => this.changeLevel(1));
+    lv.addEventListener('wheel', (e) => this.changeLevel(e.deltaY < 0 ? 1 : -1));
+    screen.append(lv);
+    row('value', [lv], (d) => this.changeLevel(-d)); // PgUp = level up
+    this.fireLabel = button('fire', 204, () => this.fireChosen(), 't-label');
+    button('phase cycle', 262, () => this.toggleCycle());
+    button('invincible', 318, () => (this.invincible = !this.invincible));
+    button('hitboxes', 356, () => (this.view.showHitboxes = !this.view.showHitboxes));
+    button('hud bands', 394, () => (this.view.showBands = !this.view.showBands));
+    button('clear bullets', 450, () => this.world.pool.clear());
+    button('Back', 560, () => go(this, 'Menu'));
+
+    this.readout = at(h('div', 'readout t-hint mono'), VIEW.cx, 60);
+    screen.append(
+      this.readout,
+      at(h('div', 't-hint', 'tab choose    pgup pgdn change    enter use    arrows move    shift ability    esc back'), VIEW.cx, 684),
+      at(h('div', 't-hint', "keys: 1-9 0 patterns  C clear  I invincible  H hitboxes  P prism  J K L  U Y O  , / [ ] \\  ; ' -  X .  box Q E R T F G V B N M Z  Home End loadout"), VIEW.cx, 708),
+    );
+    mountScreen(this, screen);
+    this.charIdx = 0;
+    this.attackIdx = 0;
+    this.level = 20;
+    this.focus = 0;
+    this.renderPanel(true);
+  }
+
+  private setFocus(i: number, fromKeyboard = false): void {
+    const n = this.rows.length;
+    const next = ((i % n) + n) % n;
+    if (next === this.focus) return;
+    this.focus = next;
+    this.renderPanel(true);
+    if (fromKeyboard) replay(this.rows[next]!.els[0]!, 'pop');
+  }
+
+  private chooseChar(i: number): void {
+    if (i < 0 || i === this.charIdx) return;
+    this.charIdx = i;
+    this.attackIdx = 0;
+    if (this.cycling) this.applyCycle();
+    this.renderPanel(true);
+  }
+
+  private changeLevel(d: number): void {
+    const next = Math.max(1, Math.min(20, this.level + d));
+    if (next === this.level) {
+      replay(this.levelEl, 'nudge');
+      return;
+    }
+    this.level = next;
+    if (this.cycling) this.applyCycle();
+    this.renderPanel(true);
+    replay(this.levelEl, 'pop');
+  }
+
+  /** Fire the chosen attack at the chosen level now (Character.fireNow); locked attacks nudge. */
+  private fireChosen(): void {
+    const e = registry[this.charIdx]!;
+    const a = attacksOf(e)[this.attackIdx]!;
+    const ok = this.chars[this.charIdx]!.fireNow(a.id, this.level);
+    this.msg = ok ? `fired ${e.name} ${a.id} at level ${this.level}` : `${e.name} ${a.id} unlocks at level ${a.from}`;
+    if (!ok) replay(this.fireLabel, 'nudge');
+  }
+
+  private toggleCycle(): void {
+    this.cycling = !this.cycling;
+    this.applyCycle();
+  }
+
+  /** Phase cycle: the chosen character runs its normal schedule at the chosen level; every other one is at 0. */
+  private applyCycle(): void {
+    this.chars.forEach((c, i) => c.setLevel(this.cycling && i === this.charIdx ? this.level : 0));
+    this.msg = this.cycling ? `phase cycle: ${registry[this.charIdx]!.name} at level ${this.level}` : 'phase cycle off';
+  }
+
+  /** Re-render the panel when its state changed (keys like I / H / P change it too). */
+  private renderPanel(force = false): void {
+    const e = registry[this.charIdx]!;
+    const attacks = attacksOf(e);
+    const sig = [this.charIdx, this.attackIdx, this.level, this.cycling, this.focus, this.invincible, this.view.showHitboxes, this.view.showBands].join();
+    if (!force && sig === this.panelSig) return;
+    const rebuildAttacks = force || this.panelSig.split(',')[0] !== String(this.charIdx) || this.attackBox.childElementCount !== attacks.length;
+    this.panelSig = sig;
+    const [charRow, , levelRow, ...buttons] = this.rows;
+    charRow!.els.forEach((el, i) => {
+      el.classList.toggle('chosen', i === this.charIdx);
+      el.classList.toggle('sel', i === this.charIdx && this.focus === 0);
+    });
+    if (rebuildAttacks) {
+      this.attackBox.replaceChildren(
+        ...attacks.map((a, i) => {
+          const el = at(h('div', 'opt dbg t-body click'), 58, i * 36, 'left');
+          el.append(h('span', 'dot'), h('span', '', a.id), h('span', 'note', `lv ${a.from}+`));
+          el.addEventListener('mouseenter', () => this.setFocus(1));
+          el.addEventListener('click', () => {
+            this.attackIdx = i;
+            this.renderPanel(true);
+          });
+          return el;
+        }),
+      );
+    }
+    Array.from(this.attackBox.children).forEach((el, i) => {
+      el.classList.toggle('chosen', i === this.attackIdx);
+      el.classList.toggle('lockd', attacks[i]!.from > this.level);
+      el.classList.toggle('sel', i === this.attackIdx && this.focus === 1);
+    });
+    levelRow!.els[0]!.classList.toggle('sel', this.focus === 2);
+    this.levelEl.textContent = String(this.level).padStart(2, ' ');
+    const vals = [`${e.name} ${attacks[this.attackIdx]?.id ?? ''}`, this.cycling ? 'on' : 'off', this.invincible ? 'on' : 'off', this.view.showHitboxes ? 'on' : 'off', this.view.showBands ? 'on' : 'off', '', ''];
+    buttons.forEach((r, i) => {
+      r.els[0]!.classList.toggle('sel', this.focus === i + 3);
+      r.els[0]!.querySelector('.v')!.textContent = vals[i]!;
+    });
   }
 
   /** Prism + Ulysses demo: a refraction prism at the center and one white sword flying through it. */
@@ -299,8 +499,7 @@ export class DebugScene extends Phaser.Scene {
     this.loop.frame((input, dt) => {
       if (this.invincible) w.soul.iframes = Math.max(w.soul.iframes, 2 * STEP);
       this.stepChaos(dt);
-      this.prism.tick(dt);
-      this.warden.tick(dt);
+      for (const c of this.chars) c.tick(dt);
       w.step(input, dt);
     });
     if (this.loop.lastStepMs > 0) {
@@ -309,19 +508,20 @@ export class DebugScene extends Phaser.Scene {
     }
     this.view.draw(this.loop.realDt);
     const avg = this.stepSamples.reduce((s, x) => s + x, 0) / Math.max(1, this.stepSamples.length);
-    this.readout.setText(
-      `DEBUG  bullets ${w.pool.activeCount}/${w.pool.capacity}  dropped ${w.pool.dropped}\n` +
-        `step avg ${avg.toFixed(3)} ms  max ${this.loop.maxStepMs.toFixed(3)} ms  (budget ${(STEP * 1000).toFixed(1)} ms)\n` +
-        `hp ${Math.ceil(w.soul.hp)}/${w.soul.maxHp}  kr ${w.soul.kr.toFixed(1)}  ${this.invincible ? 'INVINCIBLE' : ''}  prism lv ${this.prism.level} (P)
-` +
-        `active ${abilityName(this.loadout.active, ACTIVE_INFO)} (Home)  passive ${abilityName(this.loadout.passive, PASSIVE_INFO)} (End)  time x${w.timeScale}`,
-    );
     const b = w.box;
     const walls = WALLS.map((k) => `${k[0]!.toUpperCase()}:${b.walls[k].damaging ? (b.walls[k].type === 'kr' ? 'KR' : 'DMG') : 'safe'}`).join(' ');
-    this.boxText.setText(
-      `box ${b.width.toFixed(0)}x${b.height.toFixed(0)} at (${b.x.toFixed(0)},${b.y.toFixed(0)}) rot ${((b.rotation * 180) / Math.PI).toFixed(1)}°` +
-        `${b.moving ? ' MOVING' : ''}${this.chaos ? ' CHAOS' : ''}
-walls ${walls}`,
-    );
+    const text =
+      `bullets ${w.pool.activeCount}/${w.pool.capacity}  dropped ${w.pool.dropped}   step avg ${avg.toFixed(3)} ms  max ${this.loop.maxStepMs.toFixed(3)} ms   hp ${Math.ceil(w.soul.hp)}/${w.soul.maxHp}  kr ${w.soul.kr.toFixed(1)}
+` +
+      `active ${abilityName(this.loadout.active, ACTIVE_INFO)} (Home)  passive ${abilityName(this.loadout.passive, PASSIVE_INFO)} (End)  time x${w.timeScale}   prism lv ${this.prism.level} (P)
+` +
+      `box ${b.width.toFixed(0)}x${b.height.toFixed(0)} at (${b.x.toFixed(0)},${b.y.toFixed(0)}) rot ${((b.rotation * 180) / Math.PI).toFixed(1)}°${b.moving ? ' moving' : ''}${this.chaos ? ' chaos' : ''}   walls ${walls}` +
+      (this.msg ? `
+${this.msg}` : '');
+    if (text !== this.readoutText) {
+      this.readoutText = text;
+      this.readout.textContent = text;
+    }
+    this.renderPanel();
   }
 }

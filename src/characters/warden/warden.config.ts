@@ -50,6 +50,8 @@ export interface WardenRules {
  */
 export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
   id: 'warden',
+  title: 'The Warden',
+  description: 'Never lays a finger on you. Just everything around you.',
   maxLevel: 20,
   bands: [
     {

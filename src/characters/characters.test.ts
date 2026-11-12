@@ -13,6 +13,8 @@ import { STEP } from '../core/Clock';
 type T = 'shot' | 'wave';
 const cfg: CharacterConfig<T> = {
   id: 'test',
+  title: 'Test',
+  description: 'test',
   maxLevel: 10,
   bands: [
     { from: 1, to: 5, attacks: { shot: { cooldown: [2, 1], damage: [4, 8], count: [3, 6] } } },
@@ -65,7 +67,7 @@ describe('validateConfig', () => {
   });
   it('catches gaps, dropped attacks and bad cooldowns', () => {
     const bad: CharacterConfig<T> = {
-      id: 'bad', maxLevel: 10, rules: {},
+      id: 'bad', title: 'Bad', description: 'bad', maxLevel: 10, rules: {},
       bands: [
         { from: 1, to: 4, attacks: { shot: { cooldown: [1, 1] }, wave: { cooldown: [0, 1] } } },
         { from: 6, to: 10, attacks: { shot: { cooldown: [1, 1] } } },

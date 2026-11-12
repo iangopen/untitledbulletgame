@@ -36,6 +36,8 @@ export interface UlyssesRules {
  */
 export const ulyssesConfig: CharacterConfig<UlyssesAttack, UlyssesRules> = {
   id: 'ulysses',
+  title: 'Prince Ulysses',
+  description: 'Gold means wait. White means run.',
   maxLevel: 20,
   bands: [
     {

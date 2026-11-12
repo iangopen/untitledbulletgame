@@ -5,7 +5,7 @@ import { VIEW, hud, space, theme, toCss, type } from '../render/theme';
 import { FixedLoop } from './FixedLoop';
 import { Director } from '../director/Director';
 import { TimerMode } from '../director/modes/TimerMode';
-import { DEFAULT_ROSTER, normalizeRoster, type Roster } from '../director/roster';
+import { DEFAULT_ROSTER, normalizeRoster, rememberRoster, type Roster } from '../director/roster';
 import { registry } from '../characters/registry';
 import { at, h, replay, shape } from '../ui/dom';
 import { enter, go, mountScreen } from './ui';
@@ -18,7 +18,7 @@ export interface BattleData {
   roster?: Roster;
 }
 
-const PAUSE_OPTIONS = ['Resume', 'Settings', 'Restart', 'Quit to roster'] as const;
+const PAUSE_OPTIONS = ['Resume', 'Settings', 'Restart', 'Quit to custom'] as const;
 /** Real ms between the outcome and the results screen, so the final hit reads. */
 const END_DELAY_MS = 700;
 
@@ -72,6 +72,7 @@ export class BattleScene extends Phaser.Scene {
     enter(this);
     // Fresh state every time: roster is copied plain data, everything else is new.
     this.roster = normalizeRoster(data.roster ?? DEFAULT_ROSTER);
+    rememberRoster(this.roster);
     this.world = new World(VIEW.cx, VIEW.cy + px(6));
     this.view = new BattleView(this, this.world);
     this.loop = new FixedLoop(this);

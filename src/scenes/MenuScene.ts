@@ -1,19 +1,23 @@
 import Phaser from 'phaser';
 import { VIEW, theme } from '../render/theme';
-import { parseRosterParam } from '../director/roster';
+import { parseRosterParam, rememberRoster } from '../director/roster';
 import { at, h, replay, shape } from '../ui/dom';
 import { enter, go, mountScreen } from './ui';
 
 interface Option {
   text: string;
+  /** Scene to open. */
+  scene?: string;
   available: boolean;
   note?: string;
 }
 
 const OPTIONS: Option[] = [
-  { text: 'Timer', available: true },
-  { text: 'Waves', available: false, note: 'soon' },
-  { text: 'Settings', available: true },
+  { text: 'Custom', scene: 'Roster', available: true },
+  { text: 'Wave mode', available: false, note: 'soon' },
+  { text: 'Player', scene: 'Player', available: true },
+  { text: 'Debug', scene: 'Debug', available: true },
+  { text: 'Settings', scene: 'Settings', available: true },
 ];
 
 /** The ?roster= dev shortcut applies once per page load, not every time the menu opens. */
@@ -33,6 +37,7 @@ export class MenuScene extends Phaser.Scene {
       shortcutConsumed = true;
       const roster = parseRosterParam(new URLSearchParams(window.location.search).get('roster'));
       if (roster) {
+        rememberRoster(roster); // the Custom grid opens with these levels afterwards
         this.scene.start('Battle', { roster });
         return;
       }
@@ -43,14 +48,14 @@ export class MenuScene extends Phaser.Scene {
     const screen = h('div');
     // Mark: the soul (red circle, the one accent) between two hazard shapes.
     screen.append(
-      at(shape('triangle', theme.prism, 20), cx - 56, 214),
-      at(shape('circle', theme.soul, 11), cx, 216),
-      at(shape('square', theme.bullet.white, 18), cx + 56, 216),
-      at(h('div', 't-title', 'untitled bullet game'), cx, 300),
+      at(shape('triangle', theme.prism, 20), cx - 56, 164),
+      at(shape('circle', theme.soul, 11), cx, 166),
+      at(shape('square', theme.bullet.white, 18), cx + 56, 166),
+      at(h('div', 't-title', 'untitled bullet game'), cx, 250),
     );
 
     this.rows = OPTIONS.map((o, i) => {
-      const row = at(h('div', `opt t-label ${o.available ? 'click' : 'off no'}`), cx, 420 + i * 50);
+      const row = at(h('div', `opt t-label ${o.available ? 'click' : 'off no'}`), cx, 360 + i * 50);
       row.append(h('span', 'dot'), h('span', '', o.text));
       if (o.note) row.append(h('span', 'note', o.note));
       // Hover selects (same state as the keyboard); locked options ignore the mouse.
@@ -99,7 +104,6 @@ export class MenuScene extends Phaser.Scene {
       replay(this.rows[this.index]!, 'nudge');
       return;
     }
-    if (o.text === 'Settings') go(this, 'Settings', { from: 'Menu' });
-    else go(this, 'Roster');
+    go(this, o.scene!, o.scene === 'Settings' ? { from: 'Menu' } : undefined);
   }
 }

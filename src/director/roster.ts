@@ -43,3 +43,12 @@ export function parseRosterParam(value: string | null, entries: readonly Charact
   }
   return any ? normalizeRoster(levels, entries) : null;
 }
+
+/** The levels last set on the Custom grid or fought with (incl. ?roster=), kept for the page session. */
+let remembered: Roster = DEFAULT_ROSTER;
+export function rememberRoster(r: Roster): void {
+  remembered = normalizeRoster(r);
+}
+export function lastRoster(): Roster {
+  return normalizeRoster(remembered);
+}

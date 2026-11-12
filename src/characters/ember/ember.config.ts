@@ -42,6 +42,8 @@ export interface EmberRules {
  */
 export const emberConfig: CharacterConfig<EmberAttack, EmberRules> = {
   id: 'ember',
+  title: 'Ember',
+  description: 'Standing still is how you get burned.',
   maxLevel: 20,
   bands: [
     {

@@ -54,19 +54,33 @@ export const UI_CSS = `
 :is(#ui-root, #ui-under-root) .opt .note { position: absolute; left: calc(100% + ${space.sm}px); top: 50%; transform: translateY(-40%);
   font-size: ${type.hint}px; color: ${c(theme.textMuted)}; }
 
-/* Roster */
-:is(#ui-root, #ui-under-root) .slot { position: absolute; top: 0; width: 0; height: ${VIEW.height}px; opacity: 0.4; transition: opacity 90ms linear; }
-:is(#ui-root, #ui-under-root) .slot.sel, :is(#ui-root, #ui-under-root) .slot.locked { opacity: 1; }
-:is(#ui-root, #ui-under-root) .slot .hit { position: absolute; left: -90px; width: 180px; top: 250px; height: 250px; }
-:is(#ui-root, #ui-under-root) .slot .underline { position: absolute; left: -36px; width: 72px; top: 470px; height: ${line.thin}px; visibility: hidden; }
-:is(#ui-root, #ui-under-root) .slot.sel .underline { visibility: visible; }
-:is(#ui-root, #ui-under-root) .slot.locked .name { color: ${c(theme.locked)}; font-size: ${type.small}px; }
+/* Custom grid: portraits (thin frame, black fill) with ‹ level › beneath. Selected = bright frame and
+   an accent underline; level 0 dims the icon; placeholders are black, locked (not-allowed cursor). */
+:is(#ui-root, #ui-under-root) .cell { position: absolute; width: 0; height: 0; }
+:is(#ui-root, #ui-under-root) .cell .portrait { position: absolute; left: -32px; top: -32px; width: 64px; height: 64px; box-sizing: border-box;
+  border: ${line.thin}px solid ${c(theme.rule)}; background: #000; display: flex; align-items: center; justify-content: center; }
+:is(#ui-root, #ui-under-root) .cell.zero .portrait svg { opacity: 0.45; }
+:is(#ui-root, #ui-under-root) .cell.last .portrait { border-color: ${c(theme.textMuted)}; }
+:is(#ui-root, #ui-under-root) .cell.sel .portrait { border-color: ${c(theme.text)}; }
+:is(#ui-root, #ui-under-root) .cell .level { color: ${c(theme.text)}; }
+:is(#ui-root, #ui-under-root) .cell.zero .level { color: ${c(theme.textDim)}; }
+:is(#ui-root, #ui-under-root) .cell .arrow { font-size: 20px; padding: 2px 8px; }
+:is(#ui-root, #ui-under-root) .cell.sel .arrow { color: ${c(theme.textDim)}; }
+:is(#ui-root, #ui-under-root) .cell .uline { position: absolute; left: -20px; width: 40px; top: 66px; height: ${line.thin}px; background: var(--accent); visibility: hidden; }
+:is(#ui-root, #ui-under-root) .cell.sel .uline { visibility: visible; }
+:is(#ui-root, #ui-under-root) .info-desc { position: absolute; width: 330px; white-space: normal; line-height: 1.45; }
 :is(#ui-root, #ui-under-root) .arrow { font-size: 14px; color: ${c(theme.textMuted)}; padding: 6px 10px; }
-:is(#ui-root, #ui-under-root) .slot.sel .arrow { color: ${c(theme.textDim)}; }
 :is(#ui-root, #ui-under-root) .arrow:hover { color: ${c(theme.text)}; }
-:is(#ui-root, #ui-under-root) .level.zero { color: ${c(theme.textDim)}; }
+:is(#ui-root, #ui-under-root) .section { color: ${c(theme.textMuted)}; }
 
-/* Roster loadout picker: a row label, then options (icon + name). Equipped = bright with a thin
+/* Debug sandbox: list items and toggles in the menu style (dim, selected bright with the red dot). */
+:is(#ui-root, #ui-under-root) .dbg { display: flex; align-items: center; gap: 8px; }
+:is(#ui-root, #ui-under-root) .dbg.chosen { color: ${c(theme.text)}; }
+:is(#ui-root, #ui-under-root) .dbg .v { color: ${c(theme.text)}; }
+:is(#ui-root, #ui-under-root) .dbg.lockd { color: ${c(theme.locked)}; }
+:is(#ui-root, #ui-under-root) .readout { white-space: pre; line-height: 1.5; }
+
+/* Player loadout picker: a row label, then options (icon + name). Equipped = bright with a thin
    underline; in the focused row the equipped option also gets the red dot. Hover = bright. */
 :is(#ui-root, #ui-under-root) .lrow-label { color: ${c(theme.textMuted)}; }
 :is(#ui-root, #ui-under-root) .lrow-label.focus { color: ${c(theme.text)}; }

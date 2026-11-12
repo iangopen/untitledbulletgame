@@ -11,6 +11,8 @@ import { RosterScene } from './scenes/RosterScene';
 import { BattleScene } from './scenes/BattleScene';
 import { ResultsScene } from './scenes/ResultsScene';
 import { SettingsScene } from './scenes/SettingsScene';
+import { PlayerScene } from './scenes/PlayerScene';
+import { DebugScene } from './scenes/DebugScene';
 import { frameLimiter } from './render/frameLimiter';
 import { settings } from './settings/store';
 import { theme } from './render/theme';
@@ -47,9 +49,9 @@ async function boot(): Promise<void> {
     antialiasGL: false,
     // FIT + CENTER_BOTH keeps the 16:9 view centered; the canvas is already device-pixel sized (see display.ts).
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    // Flow: Menu -> Roster -> Battle -> Results (-> Battle retry | Roster). First scene listed starts.
-    // Settings is last so it draws over a paused Battle.
-    scene: [MenuScene, RosterScene, BattleScene, ResultsScene, SettingsScene],
+    // Flow: Menu -> Custom ('Roster') -> Battle -> Results (-> Battle retry | Custom); Menu -> Player,
+    // Debug, Settings. First scene listed starts. Settings is last so it draws over a paused Battle.
+    scene: [MenuScene, RosterScene, PlayerScene, DebugScene, BattleScene, ResultsScene, SettingsScene],
   });
   installResize(game);
   // Space (slow) and the arrows must never scroll the page, whichever scene has the keyboard.
@@ -82,11 +84,8 @@ async function boot(): Promise<void> {
   });
   ui.attachCanvas(game.canvas);
 
-  // Dev-only: DEV is a build-time constant, so this branch and DebugScene are dropped from production.
-  if (import.meta.env.DEV) {
-    (window as unknown as Record<string, unknown>).__game = game;
-    void import('./scenes/DebugScene').then(({ DebugScene }) => game.scene.add('Debug', DebugScene));
-  }
+  // Dev-only: DEV is a build-time constant, so this branch is dropped from production.
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__game = game;
 }
 
 void boot();

@@ -20,6 +20,10 @@ export interface LevelBand<A extends string> {
 
 export interface CharacterConfig<A extends string, R = Record<string, number | boolean>> {
   id: string;
+  /** Full name shown in the Custom grid's info panel. */
+  title: string;
+  /** Short, vague one-liner for the Custom grid's info panel (UCN style). */
+  description: string;
   maxLevel: number;
   bands: readonly LevelBand<A>[];
   /** Non-level rules (e.g. split generation limit). Plain values Ian can tweak. */
@@ -78,4 +82,11 @@ export function validateConfig<A extends string>(cfg: CharacterConfig<A, unknown
   });
   if (expect - 1 !== cfg.maxLevel) errs.push(`bands end at ${expect - 1}, maxLevel is ${cfg.maxLevel}`);
   return errs;
+}
+
+/** Every attack id of a config, in order of first appearance, with the level it unlocks at. */
+export function attackList(cfg: CharacterConfig<string, unknown>): { id: string; from: number }[] {
+  const out: { id: string; from: number }[] = [];
+  for (const b of cfg.bands) for (const id of Object.keys(b.attacks)) if (!out.some((a) => a.id === id)) out.push({ id, from: b.from });
+  return out;
 }

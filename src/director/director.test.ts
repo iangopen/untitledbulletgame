@@ -15,6 +15,7 @@ const still = { dx: 0, dy: 0, slow: false };
 function fakeEntry(id: string, log: string[]): CharacterEntry {
   return {
     id, name: id, color: 0xffffff, maxLevel: 20, shape: 'circle',
+    config: { id, title: id, description: '', maxLevel: 20, bands: [], rules: {} },
     create: (): CharacterHandle => {
       log.push(`create ${id}`);
       const c = {
@@ -22,6 +23,7 @@ function fakeEntry(id: string, log: string[]): CharacterEntry {
         get active() { return c.level > 0; },
         setLevel(l: number) { c.level = l; },
         tick() { c.ticks++; },
+        fireNow: () => false,
         dispose() { log.push(`dispose ${id}`); },
       };
       return c;

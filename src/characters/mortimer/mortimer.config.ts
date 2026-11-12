@@ -41,6 +41,8 @@ export interface MortimerRules {
  */
 export const mortimerConfig: CharacterConfig<MortimerAttack, MortimerRules> = {
   id: 'mortimer',
+  title: 'Mortimer G. Frostwick Jr.',
+  description: 'Prefers you hold very, very still.',
   maxLevel: 20,
   bands: [
     {

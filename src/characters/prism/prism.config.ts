@@ -47,6 +47,8 @@ export interface PrismRules {
  */
 export const prismConfig: CharacterConfig<PrismAttack, PrismRules> = {
   id: 'prism',
+  title: 'Prism',
+  description: 'Splits light into something far less friendly.',
   maxLevel: 20,
   bands: [
     {

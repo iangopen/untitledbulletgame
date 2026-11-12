@@ -47,6 +47,8 @@ export interface CharacterHandle {
   readonly active: boolean;
   setLevel(level: number): void;
   tick(dt: number): void;
+  /** Run one attack now with the params of `level` (Debug sandbox). False if not unlocked there. */
+  fireNow(id: string, level?: number): boolean;
   dispose(): void;
   /** Every bullet look this character can produce at its current level (texture prewarm). */
   lookSpecs?(): LookSpec[];

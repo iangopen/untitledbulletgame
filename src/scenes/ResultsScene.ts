@@ -13,9 +13,9 @@ function formatTime(s: number): string {
   return `${m}:${rest.toFixed(1).padStart(4, '0')}`;
 }
 
-const ACTIONS = ['Retry', 'Roster'] as const;
+const ACTIONS = ['Retry', 'Custom'] as const;
 
-/** Outcome screen. Retry / Roster are clickable and keyboard-selectable (← →, Enter); R and Esc still work. */
+/** Outcome screen. Retry / Custom are clickable and keyboard-selectable (← →, Enter); R and Esc still work. */
 export class ResultsScene extends Phaser.Scene {
   private index = 0;
   private buttons: HTMLElement[] = [];
@@ -61,7 +61,7 @@ export class ResultsScene extends Phaser.Scene {
       screen.append(b);
       return b;
     });
-    screen.append(at(h('div', 't-hint', 'r retry    esc roster'), VIEW.cx, VIEW.height - 40));
+    screen.append(at(h('div', 't-hint', 'r retry    esc custom'), VIEW.cx, VIEW.height - 40));
     mountScreen(this, screen);
 
     this.index = 0;
