@@ -162,7 +162,8 @@ export class Mortimer extends Character<MortimerAttack, MortimerRules> {
 
   // --- Blizzard: fast horizontal gusts sweep the whole box ---------------------
   private planBlizzard(p: ResolvedAttack): Shot[] {
-    const { box, pool } = this.world;
+    const { box } = this.world;
+    const pool = this.world.pool;
     const edge = this.nextSide();
     const opts = { edge, spacing: this.rules.gustSpacing, speed: p.speed!, style: this.style('blizzard', p) };
     const off = lineOffset(box, opts);
@@ -171,7 +172,10 @@ export class Mortimer extends Character<MortimerAttack, MortimerRules> {
     return [{
       lead: off / p.speed!,
       fire: () => {
-        for (let k = 0; k < p.count!; k++) line(pool, this.world.box, { ...opts, offset: off + k * this.rules.gustWaveGap * p.speed! });
+        // Off screen for the box as it is NOW (it may be shoved, tossed or turned since the plan).
+        const box = this.world.box;
+        const at = lineOffset(box, opts);
+        for (let k = 0; k < p.count!; k++) line(pool, box, { ...opts, offset: at + k * this.rules.gustWaveGap * p.speed! });
       },
     }];
   }
