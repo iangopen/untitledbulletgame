@@ -51,3 +51,7 @@ world.boxes + world.box (the soul's box), split/merge/reset with reframing, per-
 ## 2026-11-11 - Ember, toss-and-spin, Box.scaleTo
 Ember (slot 5, orange support: embers, fire sweep, wildfire rings) completes the five launch characters. The Warden's swing became a toss: Box.scaleTo shrinks the box (soul scales with it), it spins whole turns while small and lands with a shake (boxLanded). New 'ring' bullet shape drawn as stretched line chords. No new combos (Ian designs them).
 Found: the soul disc texture was keyed by radius (45 mid-battle builds once the soul scaled); sweep and gust off-screen offsets were planned before a toss and started in a HUD band. Fast-forwarding the sim in one real frame leaves despawn ghosts on screen; clear view.ghosts before screenshots.
+
+## 2026-11-11 - Box slides under the soul, gentler toss, Ember fire visuals
+After play-testing: box moves, turns, resizes and toss scales keep the soul's world position (only walls that reach it push it); the soul never scales; the toss bottoms out at 0.80 (was 0.5). Ember's embers, sweep walls and rings are flame shapes (ring tongues share geometry for drawing and collision), flicker is alpha only, and a blinking fire icon warns 0.6 s before each ring.
+Screenshot tooling: freezing game.loop mid scene-fade leaves the camera dimmed; reset cameras.main.fadeEffect before capturing.
