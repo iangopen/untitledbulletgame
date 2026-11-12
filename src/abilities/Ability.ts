@@ -12,8 +12,10 @@ export interface ActiveAbility {
   readonly id: string;
   /** Short lowercase label for the HUD. */
   readonly name: string;
-  /** Seconds from use until ready again. */
+  /** Seconds from use until ready again (after passives: baseCooldown x cooldownScale). */
   readonly cooldown: number;
+  /** Cooldown multiplier (Quick charge sets it once at battle start). */
+  cooldownScale: number;
   /** Seconds until ready (0 = ready). */
   readonly remaining: number;
   readonly ready: boolean;
@@ -32,8 +34,14 @@ export interface ActiveAbility {
 export abstract class CooldownAbility implements ActiveAbility {
   abstract readonly id: string;
   abstract readonly name: string;
-  abstract readonly cooldown: number;
+  /** Seconds from use until ready, before passives (tuning.ts). */
+  abstract readonly baseCooldown: number;
+  cooldownScale = 1;
   remaining = 0;
+
+  get cooldown(): number {
+    return this.baseCooldown * this.cooldownScale;
+  }
 
   get ready(): boolean {
     return this.remaining <= 0;

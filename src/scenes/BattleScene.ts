@@ -12,7 +12,7 @@ import { enter, go, mountScreen } from './ui';
 import { px } from '../tuning';
 import { perfOverlay } from '../ui/PerfOverlay';
 import { ui } from '../ui/UiLayer';
-import { browserStorage, createActive, loadLoadout } from '../abilities/loadout';
+import { browserStorage, equipLoadout, loadLoadout, type Loadout } from '../abilities/loadout';
 
 export interface BattleData {
   roster?: Roster;
@@ -57,6 +57,7 @@ export class BattleScene extends Phaser.Scene {
   /** HUD text below the canvas (bullets draw over it); see UiLayer under-layer. */
   private hudUnder!: HTMLElement;
   /** Profile box per active character, lit on its attackStarted events. */
+  private loadout!: Loadout;
   private profiles = new Map<string, HTMLElement>();
   /** Dev verification: when each light-up happened (sim time + real time). */
   readonly profileLog: { owner: string; attack: string; time: number; at: number }[] = [];
@@ -74,8 +75,9 @@ export class BattleScene extends Phaser.Scene {
     this.world = new World(VIEW.cx, VIEW.cy + px(6));
     this.view = new BattleView(this, this.world);
     this.loop = new FixedLoop(this);
-    // The equipped active ability (plain-data loadout; the Phase 8 shop will change it).
-    this.world.ability = createActive(loadLoadout(browserStorage()));
+    // The equipped loadout (plain data, chosen on the roster screen): active + passive, one hook.
+    this.loadout = loadLoadout(browserStorage());
+    equipLoadout(this.world, this.loadout);
     this.director = new Director(this.world, this.roster, new TimerMode(devDuration()));
     // Rasterise every look the roster can produce now, behind the scene fade, so no texture is
     // built mid-battle (rebuilt the same way if the render scale changes).
@@ -288,7 +290,7 @@ export class BattleScene extends Phaser.Scene {
     const outcome = this.director.outcome;
     if (outcome && !this.ending) {
       this.ending = true;
-      this.time.delayedCall(END_DELAY_MS, () => go(this, 'Results', { outcome: { ...outcome, roster: { ...outcome.roster } } }));
+      this.time.delayedCall(END_DELAY_MS, () => go(this, 'Results', { outcome: { ...outcome, roster: { ...outcome.roster } }, loadout: { ...this.loadout } }));
     }
   }
 }

@@ -12,7 +12,7 @@ import { CooldownAbility } from '../Ability';
 export class Dash extends CooldownAbility {
   readonly id = 'dash';
   readonly name = 'dash';
-  readonly cooldown = DASH_COOLDOWN;
+  readonly baseCooldown = DASH_COOLDOWN;
   /** Box-local unit direction of the current dash. */
   private readonly dir: Vec2 = { x: 0, y: 0 };
   /** Seconds of dash movement left. */

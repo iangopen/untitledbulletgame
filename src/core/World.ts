@@ -61,7 +61,14 @@ export class World {
   readonly props: Prop[] = [];
   /** The equipped active ability (from the loadout), or null. */
   ability: ActiveAbility | null = null;
-  /** Simulated seconds. */
+  /**
+   * Rate of everything except the soul (Slow time): bullets, every box's motion, character attack
+   * timers (the Director scales their tick) and hazards advance by dt * timeScale each fixed step;
+   * the soul, its abilities and i-frames use the real dt. The step itself stays fixed (60 Hz), so
+   * runs are deterministic. 1 = normal.
+   */
+  timeScale = 1;
+  /** Simulated world seconds (scaled by timeScale). */
   time = 0;
   steps = 0;
   /** Step index of the most recent damaging hit (renderer triggers flash/shake on change). */
@@ -222,7 +229,9 @@ export class World {
     const { soul, pool, box } = this;
     this.snapshot();
     this.steps++;
-    this.time += dt;
+    // The world (not the soul) runs at timeScale this step.
+    const wdt = dt * this.timeScale;
+    this.time += wdt;
     // 1. Box motion. The soul and every bullet stay WORLD-fixed: wherever the box moves, turns,
     // resizes or scales (a toss), the box slides under them. The soul keeps its world position and
     // only a wall that actually reaches it moves it (the clamp below pushes it just inside). Bullets
@@ -233,7 +242,7 @@ export class World {
     const c0 = Math.cos(orot), s0 = Math.sin(orot);
     const swx = ox + soul.pos.x * c0 - soul.pos.y * s0;
     const swy = oy + soul.pos.x * s0 + soul.pos.y * c0;
-    box.step(dt);
+    box.step(wdt);
     if (box.x !== ox || box.y !== oy || box.rotation !== orot) {
       const c1 = Math.cos(box.rotation), s1 = Math.sin(box.rotation);
       const dx = swx - box.x, dy = swy - box.y;
@@ -243,7 +252,7 @@ export class World {
     }
     // Other boxes (split) move on their own tracks; bullets are not stored in their frames.
     const others = this.otherBoxes;
-    for (const o of others) o.step(dt);
+    for (const o of others) o.step(wdt);
     // 2. Soul. Clamping every step means a moving wall pushes the soul inward; it can never be outside.
     // The active ability runs first; it may take over movement (dash).
     const ab = this.ability;
@@ -257,9 +266,9 @@ export class World {
     if (!took) soul.move(input, dt, box);
     box.clampLocal(soul.pos, soul.hitRadius);
     soul.tick(dt);
-    pool.update(dt, box, others);
+    pool.update(wdt, box, others);
     // Per-step hook for combo rules (director/interactions.ts), after bullets move, before hits.
-    this.bus.emit('stepped', { dt });
+    this.bus.emit('stepped', { dt: wdt });
     if (!soul.alive) return;
 
     const hit = this.hit;

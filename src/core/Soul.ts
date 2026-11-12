@@ -3,6 +3,7 @@ import {
   IFRAME_DURATION,
   KR_DRAIN_RATE,
   MAX_HP,
+  SHIELD_BREAK_IFRAMES,
   SLOW_MULTIPLIER,
   SOUL_RADIUS,
   SOUL_SPEED,
@@ -45,7 +46,18 @@ export class Soul {
   /** Drawn radius == collision radius. Never changes (a tossed box does not resize the soul). */
   readonly hitRadius = SOUL_RADIUS;
   hp = MAX_HP;
-  readonly maxHp = MAX_HP;
+  /** Per battle (passives may change these once at battle start). */
+  maxHp = MAX_HP;
+  iframeDuration = IFRAME_DURATION;
+  slowMultiplier = SLOW_MULTIPLIER;
+  /**
+   * Shield bubble up (the Shield active): the next damaging hit of any kind (white, blue, orange,
+   * KR, a damaging wall) is absorbed instead, the bubble breaks and grants SHIELD_BREAK_IFRAMES.
+   * Harmless contacts never reach damage(), so they never break it.
+   */
+  shielded = false;
+  /** Hits the shield absorbed (feedback and verification). */
+  shieldBreaks = 0;
   /** HP still owed to KR poison. */
   kr = 0;
   /** Seconds of invulnerability remaining. */
@@ -81,7 +93,7 @@ export class Soul {
       dy *= Math.SQRT1_2;
     }
     const d = box.dirToLocal({ x: dx, y: dy }, this.dir);
-    const speed = SOUL_SPEED * (input.slow ? SLOW_MULTIPLIER : 1);
+    const speed = SOUL_SPEED * (input.slow ? this.slowMultiplier : 1);
     this.pos.x += d.x * speed * dt;
     this.pos.y += d.y * speed * dt;
     box.clampLocal(this.pos, this.hitRadius);
@@ -103,13 +115,19 @@ export class Soul {
   damage({ amount, type }: DamageInfo): DamageResult {
     if (!this.alive) return 'dead';
     if (amount <= 0 || this.invulnerable) return 'blocked';
+    if (this.shielded) {
+      this.shielded = false;
+      this.shieldBreaks++;
+      this.iframes = Math.max(this.iframes, SHIELD_BREAK_IFRAMES);
+      return 'blocked';
+    }
     if (type === 'kr') {
       this.kr = Math.min(this.kr + amount, Math.max(0, this.hp - 1));
     } else {
       this.hp = Math.max(0, this.hp - amount);
       this.kr = Math.min(this.kr, Math.max(0, this.hp - 1));
     }
-    this.iframes = IFRAME_DURATION;
+    this.iframes = this.iframeDuration;
     return this.alive ? 'applied' : 'dead';
   }
 

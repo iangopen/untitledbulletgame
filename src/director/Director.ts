@@ -57,7 +57,10 @@ export class Director {
   step(input: MoveInput, dt: number): void {
     if (this.outcome) return;
     const w = this.world;
-    for (const c of this.characters) c.tick(dt);
+    // Character attack timers run on world time (Slow time scales them); the battle timer counts
+    // REAL time, so slow time can't make a timer run end sooner or later.
+    const wdt = dt * w.timeScale;
+    for (const c of this.characters) c.tick(wdt);
     w.step(input, dt);
     this.time += dt;
     const result = this.mode.evaluate(this.state);

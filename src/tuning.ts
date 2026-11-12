@@ -27,6 +27,33 @@ export const DASH_IFRAMES = DASH_DURATION;
 /** Trail fade after the dash ends (visual only). */
 export const DASH_TRAIL_FADE = 0.16;
 
+// --- Actives (one equipped, on Shift). Every number here. ---
+/** Shield: a bubble that absorbs the next damaging hit (any type, damaging walls too) or expires. */
+export const SHIELD_DURATION = 2.0;
+export const SHIELD_COOLDOWN = 8;
+/** I-frames granted when the shield breaks, so the same bullet can't hit on the next step. */
+export const SHIELD_BREAK_IFRAMES = 0.4;
+/** Slow time: everything except the soul (bullets, boxes, character timers, hazards) runs at this rate. */
+export const SLOWTIME_SCALE = 0.45;
+/** Real seconds the slow lasts. */
+export const SLOWTIME_DURATION = 2.5;
+export const SLOWTIME_COOLDOWN = 12;
+/** Blink: an instant teleport this far in the held direction (screen-relative), clamped into the soul's box. */
+export const BLINK_DISTANCE = px(70);
+export const BLINK_COOLDOWN = 4;
+/** Seconds the blink flash (start and end markers) fades over (visual only). */
+export const BLINK_FLASH_TIME = 0.22;
+
+// --- Passives (one equipped, applied once at battle start). ---
+/** Thick skin: max HP multiplier. */
+export const THICK_SKIN_HP = 1.25;
+/** Afterglow: i-frames after a hit (s), instead of IFRAME_DURATION. */
+export const AFTERGLOW_IFRAMES = 1.5;
+/** Quick charge: active cooldown multiplier. */
+export const QUICK_CHARGE_COOLDOWN = 0.75;
+/** Steady: slow movement multiplier, instead of SLOW_MULTIPLIER. */
+export const STEADY_SLOW_MULTIPLIER = 0.6;
+
 /** Maximum HP. */
 export const MAX_HP = 100;
 /** Invulnerability after a hit, in seconds. */

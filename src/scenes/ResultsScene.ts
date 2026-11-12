@@ -5,6 +5,7 @@ import { registry } from '../characters/registry';
 import { totalLevel } from '../director/roster';
 import { at, h, replay } from '../ui/dom';
 import { enter, go, mountScreen } from './ui';
+import { ACTIVE_INFO, PASSIVE_INFO, abilityName, type Loadout } from '../abilities/loadout';
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60);
@@ -24,7 +25,7 @@ export class ResultsScene extends Phaser.Scene {
     super('Results');
   }
 
-  create(data: { outcome: Outcome }): void {
+  create(data: { outcome: Outcome; loadout?: Loadout }): void {
     enter(this);
     const o = data.outcome;
     this.roster = { ...o.roster };
@@ -43,10 +44,12 @@ export class ResultsScene extends Phaser.Scene {
       ['hp left', `${Math.ceil(o.hp)} / ${o.maxHp}`],
       ...active.map((e): [string, string] => [e.name, String(this.roster[e.id])]),
       ['difficulty', String(totalLevel(this.roster))],
+      ['loadout', `${abilityName(data.loadout?.active ?? null, ACTIVE_INFO)} · ${abilityName(data.loadout?.passive ?? null, PASSIVE_INFO)}`],
     ];
-    const rowH = type.body + space.md;
+    // Rows fit between the title and the buttons, however many characters fought.
+    const rowH = Math.min(type.body + space.md, (550 - 300) / Math.max(1, rows.length - 1));
     rows.forEach(([k, v], i) => {
-      const y = 330 + i * rowH;
+      const y = 300 + i * rowH;
       screen.append(at(h('div', 't-body dim', k), VIEW.cx - space.md, y, 'right'), at(h('div', 't-body mono', v), VIEW.cx + space.md, y, 'left'));
     });
 
