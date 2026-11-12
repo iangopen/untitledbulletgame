@@ -21,7 +21,7 @@ export function at<T extends HTMLElement | SVGElement>(el: T, x: number, y: numb
   return el;
 }
 
-export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman';
+export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -43,6 +43,11 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
       c.setAttribute('r', String(cr * r));
       node.appendChild(c);
     }
+  } else if (kind === 'shield') {
+    // Heater shield: flat top, straight sides, curved point at the bottom.
+    node = document.createElementNS(SVG_NS, 'path');
+    const w = r * 0.82;
+    node.setAttribute('d', `M ${-w} ${-r * 0.85} L ${w} ${-r * 0.85} L ${w} ${r * 0.05} Q ${w} ${r * 0.7} 0 ${r} Q ${-w} ${r * 0.7} ${-w} ${r * 0.05} Z`);
   } else if (kind === 'circle') {
     node = document.createElementNS(SVG_NS, 'circle');
     node.setAttribute('r', String(r));

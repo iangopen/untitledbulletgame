@@ -1,3 +1,6 @@
+import { Ulysses } from '../characters/ulysses/Ulysses';
+import { SWORD_FLAGS, ulyssesConfig } from '../characters/ulysses/ulysses.config';
+import { installInteractions } from '../director/interactions';
 import { Mortimer } from '../characters/mortimer/Mortimer';
 import Phaser from 'phaser';
 import { PROJECTILE_TYPES } from '../combat/projectile';
@@ -13,7 +16,7 @@ import type { Wall } from '../combat/Bullet';
 import { STEP } from '../core/Clock';
 import { WALLS } from '../core/Box';
 import { WALL_DAMAGE } from '../tuning';
-import { characterById } from '../characters/registry';
+import { characterById, registry } from '../characters/registry';
 import type { CharacterHandle } from '../characters/Character';
 
 /**
@@ -23,6 +26,8 @@ import type { CharacterHandle } from '../characters/Character';
  * Box: Q/E rotate -/+30 deg · R +90 · T +180 · F resize small/default · G move · V fast squeeze left
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
  * Mortimer (level 20 params, fired now from off screen): J snowfall · K snowball roll · L blizzard
+ * Ulysses (level 20 params): U summon · Y side swipe · O sword rain
+ * Combos: X sword through a refraction prism (Prism + Ulysses) · . toggle Mortimer's blizzard phase (swords sync)
  */
 export class DebugScene extends Phaser.Scene {
   private world!: World;
@@ -40,6 +45,8 @@ export class DebugScene extends Phaser.Scene {
   private boxText!: Phaser.GameObjects.Text;
   private prism!: CharacterHandle;
   private mortimer!: Mortimer;
+  private ulysses!: Ulysses;
+  private blizzard = false;
 
   constructor() {
     super('Debug');
@@ -54,9 +61,15 @@ export class DebugScene extends Phaser.Scene {
     this.view.showHitboxes = true;
     this.prism = characterById('prism')!.create(this.world);
     this.mortimer = new Mortimer(this.world, 2);
+    this.ulysses = new Ulysses(this.world, 3);
+    // Every combo rule, as if all characters were active, so X and . can show them.
+    const offCombos = installInteractions(this.world, new Set(registry.map((e) => e.id)));
+    this.blizzard = false;
     this.events.once('shutdown', () => {
       this.prism.dispose();
       this.mortimer.dispose();
+      this.ulysses.dispose();
+      offCombos();
     });
     this.loop = new FixedLoop(this);
     this.stepSamples = [];
@@ -64,7 +77,7 @@ export class DebugScene extends Phaser.Scene {
     this.readout = this.add.text(16, 12, '', { ...mono, color: toCss(theme.text) }).setResolution(renderScale());
     this.boxText = this.add.text(16, 80, '', { ...mono, color: toCss(theme.textDim) }).setResolution(renderScale());
     this.add
-      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
+      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  U/Y/O ulysses  X . combos  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
       .setOrigin(0.5)
       .setResolution(renderScale());
 
@@ -118,6 +131,16 @@ export class DebugScene extends Phaser.Scene {
       J: () => this.mortimer.fireNow('snowfall', 20),
       K: () => this.mortimer.fireNow('roll', 20),
       L: () => this.mortimer.fireNow('blizzard', 20),
+      U: () => this.ulysses.fireNow('summon', 20),
+      Y: () => this.ulysses.fireNow('swipe', 20),
+      O: () => this.ulysses.fireNow('rain', 20),
+      X: () => this.prismCombo(),
+      PERIOD: () => {
+        this.blizzard = !this.blizzard;
+        const phase = this.blizzard ? 'blizzard' : 'breather';
+        this.world.bus.emit('mortimerPhaseChanged', { owner: 'mortimer', phase, next: 'blizzard' });
+        if (this.blizzard) this.ulysses.fireNow('summon', 20);
+      },
       Z: () => {
         this.chaos = false;
         this.small = false;
@@ -131,8 +154,23 @@ export class DebugScene extends Phaser.Scene {
       setChaos: (v: boolean) => (this.chaos = v),
       prism: () => this.prism,
       mortimer: () => this.mortimer,
+      ulysses: () => this.ulysses,
+      prismCombo: () => this.prismCombo(),
       setInvincible: (v: boolean) => (this.invincible = v),
     };
+  }
+
+  /** Prism + Ulysses demo: a refraction prism at the center and one white sword flying through it. */
+  private prismCombo(): void {
+    const w = this.world;
+    if (!w.props.some((p) => p.refracts)) {
+      w.props.push({ shape: 'triangle', x: 0, y: 0, r: px(28), rotation: -Math.PI / 2, color: theme.prism, refracts: true });
+    }
+    const r = ulyssesConfig.rules;
+    w.pool.spawn({
+      shape: 'beam', a: r.swordLength, b: r.swordWidth, x: -w.box.halfWidth - px(40), y: 0, vx: px(180), faceVelocity: true,
+      damage: 10, owner: 'ulysses', kind: 'white', noPop: true, flags: SWORD_FLAGS.sword,
+    });
   }
 
   /** none -> all walls normal damage -> left/right KR -> none */
