@@ -12,7 +12,10 @@ import { GOLD_FADE_TIME, SPAWN_FADE_TIME } from '../tuning';
  * Drawing AND collision both derive from these via the shape functions below,
  * so what you see is exactly what hits you.
  */
-export type BulletShape = 'circle' | 'rect' | 'triangle' | 'beam' | 'composite';
+/** 'ring': a hollow circle of radius `a` (center line) and thickness `b`, as RING_SEGMENTS chord rects (drawn == hitbox). */
+export type BulletShape = 'circle' | 'rect' | 'triangle' | 'beam' | 'composite' | 'ring';
+/** Chord rects a ring is drawn and collided as. */
+export const RING_SEGMENTS = 48;
 import type { CompositeForm } from './composite';
 import type { Wall } from '../core/Box';
 export type { Wall };
@@ -231,6 +234,7 @@ export function bulletExtent(spec: Pick<BulletSpec, 'shape' | 'a' | 'b'> & { for
   const b = spec.b ?? spec.a;
   if (spec.shape === 'beam') return Math.hypot(spec.a / 2, b / 2);
   if (spec.shape === 'rect') return Math.hypot(spec.a, b);
+  if (spec.shape === 'ring') return spec.a + b / 2;
   return spec.a;
 }
 

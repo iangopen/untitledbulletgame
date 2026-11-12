@@ -205,15 +205,19 @@ describe('The Warden rip at level 20', () => {
     }
   });
 
-  it('all four at 20 for 60 s: every attack spawned while split aims at / forms against the soul box; nothing spawns or forms in a band', () => {
+  it('all five at 20 for 60 s: every attack spawned while split or tossed aims at / forms against the soul box; nothing spawns or forms in a band', () => {
     const w = new World(640, 369);
-    const d = new Director(w, { prism: 20, mortimer: 20, ulysses: 20, warden: 20 }, new TimerMode(90));
+    const d = new Director(w, { prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20 }, new TimerMode(90));
+    let tossSpawns = 0, tossTracked = 0, tossSteps = 0;
+    const tossBy: Record<string, number> = {};
     const seen = new Set<Bullet>();
     let spawns = 0, spawnInBand = 0, goldInBand = 0, splitSpawns = 0, tracked = 0, splitSteps = 0, soulOut = 0;
     const byOwner: Record<string, number> = {};
     for (let i = 0; i < 60 * 60; i++) {
       d.characters.forEach((c) => c.tick(STEP));
       const split = w.boxes.length > 1;
+      const tossed = w.box.scale < 0.999;
+      if (tossed) tossSteps++;
       if (split) splitSteps++;
       for (const b of w.pool.all) {
         if (!b.active || b.decor) continue;
@@ -223,6 +227,13 @@ describe('The Warden rip at level 20', () => {
           spawns++;
           if (aabbInBand(a)) spawnInBand++;
           const child = (b.owner === 'prism' && b.gen > 0) || (b.owner === 'ulysses' && (b.flags & 4) !== 0);
+          if (tossed && !child) {
+            tossSpawns++;
+            if (aimsAtSoulBox(w, b)) {
+              tossTracked++;
+              tossBy[b.owner] = (tossBy[b.owner] ?? 0) + 1;
+            }
+          }
           if (split && !child) {
             splitSpawns++;
             if (aimsAtSoulBox(w, b)) {
@@ -239,12 +250,15 @@ describe('The Warden rip at level 20', () => {
       if (!soulInsideSomeBox(w)) soulOut++;
     }
     // eslint-disable-next-line no-console
-    console.log(`all four at 20, 60 s: ${spawns} spawns, ${spawnInBand} in a band, gold in a band ${goldInBand}; split for ${(splitSteps / 60).toFixed(1)} s; ${splitSpawns} attack spawns while split, ${tracked} aimed at / formed against the soul's box (${JSON.stringify(byOwner)}); soul outside every box ${soulOut}`);
+    console.log(`all five at 20, 60 s: tossed ${(tossSteps / 60).toFixed(1)} s, ${tossSpawns} attack spawns while tossed, ${tossTracked} aimed at / formed against the tossed box (${JSON.stringify(tossBy)}); ${spawns} spawns, ${spawnInBand} in a band, gold in a band ${goldInBand}; split for ${(splitSteps / 60).toFixed(1)} s; ${splitSpawns} attack spawns while split, ${tracked} aimed at / formed against the soul's box (${JSON.stringify(byOwner)}); soul outside every box ${soulOut}`);
     expect(splitSteps).toBeGreaterThan(60 * 4);
     expect(spawnInBand).toBe(0);
     expect(goldInBand).toBe(0);
     expect(splitSpawns).toBeGreaterThan(20);
     expect(tracked).toBe(splitSpawns);
+    expect(tossSteps).toBeGreaterThan(60 * 4);
+    expect(tossSpawns).toBeGreaterThan(20);
+    expect(tossTracked).toBe(tossSpawns);
     expect(soulOut).toBe(0);
   });
 });
@@ -256,7 +270,8 @@ function aimsAtSoulBox(w: World, b: Bullet): boolean {
     const dx = Math.max(0, Math.abs(b.x) - hw), dy = Math.max(0, Math.abs(b.y) - hh);
     return Math.hypot(dx, dy) < 120;
   }
-  const pad = b.owner === 'mortimer' ? 60 : 1;
+  // Snowfall and embers sway sideways; test their line with a margin of the sway amplitude.
+  const pad = b.owner === 'mortimer' || b.owner === 'ember' ? 60 : 1;
   for (let t = 0; t < 30; t += 0.01) {
     const x = b.x + b.vx * t, y = b.y + b.vy * t;
     if (Math.abs(x) <= hw + pad && Math.abs(y) <= hh + pad) return true;

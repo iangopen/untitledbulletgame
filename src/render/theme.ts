@@ -49,6 +49,8 @@ export const theme = {
   ulysses: 0xf2c230,
   /** The Warden: bright golem orange (roster and profile box only). */
   warden: 0xff9b3d,
+  /** Ember (teardrop flame): pale flame peach, for roster and profile only (RGB distance > 100 from Ulysses' gold, The Warden's orange, the soul's red and orange projectiles). */
+  ember: 0xffc29a,
   /**
    * The Warden's fists (objects, not projectiles; never collide): dark earthy burnt orange with a
    * lighter rocky edge, so they read as solid things and not as orange projectiles (#ff8a1c).

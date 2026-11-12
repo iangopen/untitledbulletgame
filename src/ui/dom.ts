@@ -21,7 +21,7 @@ export function at<T extends HTMLElement | SVGElement>(el: T, x: number, y: numb
   return el;
 }
 
-export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem';
+export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -54,6 +54,11 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
     const k = r;
     const rect = (x: number, y: number, w: number, hh: number) => `M ${x * k} ${y * k} h ${w * k} v ${hh * k} h ${-w * k} Z `;
     node.setAttribute('d', rect(-0.3, -0.95, 0.6, 0.45) + rect(-0.62, -0.42, 1.24, 0.82) + rect(-0.98, -0.3, 0.3, 0.9) + rect(0.68, -0.3, 0.3, 0.9) + rect(-0.5, 0.48, 0.38, 0.47) + rect(0.12, 0.48, 0.38, 0.47));
+  } else if (kind === 'flame') {
+    // Teardrop flame: a round base rising to a pointed tip that leans slightly.
+    node = document.createElementNS(SVG_NS, 'path');
+    const k = r;
+    node.setAttribute('d', `M ${0.12 * k} ${-k} C ${0.35 * k} ${-0.45 * k} ${0.78 * k} ${-0.1 * k} ${0.7 * k} ${0.35 * k} A ${0.7 * k} ${0.62 * k} 0 0 1 ${-0.7 * k} ${0.35 * k} C ${-0.72 * k} ${-0.05 * k} ${-0.3 * k} ${-0.4 * k} ${0.12 * k} ${-k} Z`);
   } else if (kind === 'circle') {
     node = document.createElementNS(SVG_NS, 'circle');
     node.setAttribute('r', String(r));

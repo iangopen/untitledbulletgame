@@ -3,6 +3,7 @@ import { SWORD_FLAGS, SWORD_FORM } from '../characters/ulysses/ulysses.config';
 import { installInteractions } from '../director/interactions';
 import { Mortimer } from '../characters/mortimer/Mortimer';
 import { Warden } from '../characters/warden/Warden';
+import { Ember } from '../characters/ember/Ember';
 import { wardenConfig } from '../characters/warden/warden.config';
 import { resolveLevel } from '../characters/config';
 import Phaser from 'phaser';
@@ -30,6 +31,7 @@ import type { CharacterHandle } from '../characters/Character';
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
  * Mortimer (level 20 params, fired now from off screen): J snowfall · K snowball roll · L blizzard
  * Ulysses (level 20 params): U summon · Y axe swing · O sword rain
+ * Ember (level 20 params): ; embers · ' fire sweep · - wildfire
  * The Warden (level 20 params): , punch (and the return) · / toss · [ rip apart · ] merge punch · \ re-center
  * Combos: X sword through a refraction prism (Prism + Ulysses) · . toggle Mortimer's blizzard phase (swords sync)
  */
@@ -51,6 +53,7 @@ export class DebugScene extends Phaser.Scene {
   private mortimer!: Mortimer;
   private ulysses!: Ulysses;
   private warden!: Warden;
+  private ember!: Ember;
   private blizzard = false;
 
   constructor() {
@@ -68,6 +71,7 @@ export class DebugScene extends Phaser.Scene {
     this.mortimer = new Mortimer(this.world, 2);
     this.ulysses = new Ulysses(this.world, 3);
     this.warden = new Warden(this.world, 4);
+    this.ember = new Ember(this.world, 5);
     // Every combo rule, as if all characters were active, so X and . can show them.
     const offCombos = installInteractions(this.world, new Set(registry.map((e) => e.id)));
     this.blizzard = false;
@@ -76,6 +80,7 @@ export class DebugScene extends Phaser.Scene {
       this.mortimer.dispose();
       this.ulysses.dispose();
       this.warden.dispose();
+      this.ember.dispose();
       offCombos();
     });
     this.loop = new FixedLoop(this);
@@ -84,7 +89,7 @@ export class DebugScene extends Phaser.Scene {
     this.readout = this.add.text(16, 12, '', { ...mono, color: toCss(theme.text) }).setResolution(renderScale());
     this.boxText = this.add.text(16, 80, '', { ...mono, color: toCss(theme.textDim) }).setResolution(renderScale());
     this.add
-      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  U/Y/O ulysses  , / [ ] \ warden  X . combos  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
+      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  U/Y/O ulysses  , / [ ] \ warden  ; \' - ember  X . combos  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
       .setOrigin(0.5)
       .setResolution(renderScale());
 
@@ -142,6 +147,9 @@ export class DebugScene extends Phaser.Scene {
       U: () => this.ulysses.fireNow('summon', 20),
       Y: () => this.ulysses.fireNow('axe', 20),
       O: () => this.ulysses.fireNow('rain', 20),
+      SEMICOLON: () => this.ember.fireNow('embers', 20),
+      QUOTES: () => this.ember.fireNow('sweep', 20),
+      MINUS: () => this.ember.fireNow('wildfire', 20),
       COMMA: () => this.warden.fireNow('punch', 20),
       FORWARD_SLASH: () => this.warden.fireNow('toss', 20),
       // Rip and merge on demand (level 20 params): [ rips the box apart, ] punches the left half

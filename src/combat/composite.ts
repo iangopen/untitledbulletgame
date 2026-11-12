@@ -1,5 +1,5 @@
 import type { Circle, Rect, Triangle } from './Collision';
-import { bulletCircle, bulletRect, bulletTriangle, type Bullet } from './Bullet';
+import { bulletCircle, bulletRect, bulletTriangle, RING_SEGMENTS, type Bullet } from './Bullet';
 
 /**
  * Composite shapes (pure): a themed projectile (sword, axe, gust) is several primitive parts in the
@@ -55,6 +55,23 @@ export function bulletPrimitives(b: Bullet, fn: (p: Primitive) => boolean | void
     case 'triangle':
       bulletTriangle(b, st);
       return fn(pt) === true;
+    case 'ring': {
+      // RING_SEGMENTS chords of the circle of radius a, each a rect b thick, lengthened by
+      // (b/2) tan(pi/N) at each end so neighbours meet at the outer edge. Drawn the same way.
+      const N = RING_SEGMENTS;
+      const h = Math.PI / N;
+      const mid = b.a * Math.cos(h);
+      sr.hw = b.a * Math.sin(h) + (b.b / 2) * Math.tan(h);
+      sr.hh = b.b / 2;
+      for (let i = 0; i < N; i++) {
+        const t = b.rotation + 2 * h * i;
+        sr.x = b.x + Math.cos(t) * mid;
+        sr.y = b.y + Math.sin(t) * mid;
+        sr.rotation = t + Math.PI / 2;
+        if (fn(pr) === true) return true;
+      }
+      return false;
+    }
     case 'composite': {
       const form = b.form;
       if (!form) return false;

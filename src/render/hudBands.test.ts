@@ -39,11 +39,11 @@ describe('HUD bands', () => {
     expect(w.box.y + w.box.halfHeight).toBeLessThan(hud.bottom.y);
   });
 
-  it('all four characters at 20 for 40 s (box shoved and spun): no spawn or gold-forming stage lands in a HUD band', () => {
+  it('all five characters at 20 for 40 s (box shoved, tossed and split): no spawn or gold-forming stage lands in a HUD band', () => {
     const w = new World(VIEW.cx, VIEW.cy + 9);
-    const d = new Director(w, { prism: 20, mortimer: 20, ulysses: 20, warden: 20 }, new TimerMode(60));
+    const d = new Director(w, { prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20 }, new TimerMode(60));
     const seen = new Set<Bullet>();
-    let splitSteps = 0, boxInBand = 0;
+    let splitSteps = 0, boxInBand = 0, scaledSteps = 0, scaledSpawns = 0, minScale = 1;
     let spawns = 0, onScreenSpawns = 0, spawnInBand = 0, goldSteps = 0, goldInBand = 0, passingInBand = 0;
     // The Director's step, split so spawns are measured where they spawn (before the world moves them).
     const tick = () => d.characters.forEach((c) => c.tick(STEP));
@@ -54,6 +54,8 @@ describe('HUD bands', () => {
       w.soul.iframes = 1;
       // Every box (two while The Warden has it ripped apart) stays between the bands.
       if (w.boxes.length > 1) splitSteps++;
+      if (w.box.scale < 0.999) scaledSteps++;
+      minScale = Math.min(minScale, w.box.scale);
       for (const bx of w.boxes) {
         const hx = bx.halfWidth * Math.abs(Math.cos(bx.rotation)) + bx.halfHeight * Math.abs(Math.sin(bx.rotation));
         const hy = bx.halfWidth * Math.abs(Math.sin(bx.rotation)) + bx.halfHeight * Math.abs(Math.cos(bx.rotation));
@@ -68,6 +70,7 @@ describe('HUD bands', () => {
         if (!seen.has(b)) {
           seen.add(b);
           spawns++;
+          if (w.box.scale < 0.999) scaledSpawns++;
           if (a) onScreenSpawns++;
           if (a && inBand(a)) spawnInBand++;
         }
@@ -79,11 +82,13 @@ describe('HUD bands', () => {
       for (const b of [...seen]) if (!b.active) seen.delete(b);
     }
     // eslint-disable-next-line no-console
-    console.log(`HUD bands, all four at 20 for 40 s: ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band; split ${(splitSteps / 60).toFixed(1)} s, box steps in a band or off screen ${boxInBand}`);
+    console.log(`HUD bands, all five at 20 for 40 s: tossed ${(scaledSteps / 60).toFixed(1)} s (min scale ${minScale.toFixed(2)}, ${scaledSpawns} spawns while tossed); ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band; split ${(splitSteps / 60).toFixed(1)} s, box steps in a band or off screen ${boxInBand}`);
     expect(spawnInBand).toBe(0);
     expect(goldInBand).toBe(0);
     expect(splitSteps).toBeGreaterThan(60 * 3); // the rip at 18 s is covered
     expect(boxInBand).toBe(0);
+    expect(scaledSteps).toBeGreaterThan(60 * 2); // the toss at 9 s is covered
+    expect(scaledSpawns).toBeGreaterThan(10);
   });
 
   it('HP bar color is distinct from every projectile and forming color', () => {

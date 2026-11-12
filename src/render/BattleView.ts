@@ -6,7 +6,7 @@ import { bulletPrimitives, type Primitive } from '../combat/composite';
 import type { Circle } from '../combat/Collision';
 import { hud, line, rgb, theme, VIEW } from './theme';
 import { renderScale } from './display';
-import { px } from '../tuning';
+import { px, SOUL_RADIUS } from '../tuning';
 import { BoxFrame, interpBullet, lerpPoint } from './interp';
 import { flashScreen, shakeScreen, shineShape } from './effects';
 import { LookCache, type Look } from './LookCache';
@@ -125,6 +125,7 @@ export class BattleView {
   private readonly w: Vec2[] = [0, 1, 2, 3].map(() => ({ x: 0, y: 0 }));
   private readonly tmp: Vec2 = { x: 0, y: 0 };
   private readonly tmp2: Vec2 = { x: 0, y: 0 };
+  private readonly tmp3: Vec2 = { x: 0, y: 0 };
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -239,6 +240,17 @@ export class BattleView {
       const g = this.looks.glow(b);
       glowLayer.next(g).setPosition(p.x, p.y).setRotation(rot).setScale(s / g.k).setTint(color).setAlpha(theme.glowAlpha * alpha);
     }
+    if (b.shape === 'ring') {
+      // The same chord rects collision uses (bulletPrimitives), each a stretched line look.
+      const look = this.looks.line(b.b);
+      bulletPrimitives(b, (q) => {
+        if (q.kind !== 'rect') return;
+        const c = box.toWorld(q.r, this.tmp3);
+        const img = core.next(look).setPosition(c.x, c.y).setRotation(box.rotation + (q.r.rotation ?? 0)).setScale((2 * q.r.hw) / look.size, 1 / look.k).setTint(color);
+        if (alpha < 1) img.setAlpha(alpha);
+      });
+      return;
+    }
     const look = this.looks.bullet(b);
     const k = b.shape === 'circle' ? (s * b.a) / look.size : s;
     const img = core.next(look).setPosition(p.x, p.y).setRotation(rot).setScale(k / look.k).setTint(color);
@@ -265,7 +277,7 @@ export class BattleView {
     if (this.looks.sync(scale)) for (const l of this.layers) l.reset();
     const t = this.ib;
     const lk = this.looks;
-    lk.disc(this.world.soul.hitRadius);
+    lk.disc(SOUL_RADIUS);
     lk.line(line.box);
     lk.line(line.danger);
     for (const spec of this.warmSpecs) {
@@ -298,7 +310,7 @@ export class BattleView {
 
   /** A disc sprite (soul, trail, shine fill) of radius r at world (x, y). */
   private disc(layer: SpriteLayer, x: number, y: number, r: number, color: number, alpha: number): void {
-    const look = this.looks.disc(this.world.soul.hitRadius);
+    const look = this.looks.disc(SOUL_RADIUS); // one texture; scaled to r (the soul's radius scales with a tossed box)
     layer.next(look).setPosition(x, y).setScale(r / look.size / look.k).setTint(color).setAlpha(alpha);
   }
 

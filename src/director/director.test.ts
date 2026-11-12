@@ -119,20 +119,21 @@ describe('interactions', () => {
 
 describe('roster data', () => {
   it('parses ?roster=prism:12 and clamps / ignores junk', () => {
-    expect(parseRosterParam('prism:12')).toEqual({ prism: 12, mortimer: 0, ulysses: 0, warden: 0 });
-    expect(parseRosterParam('prism:12,mortimer:10')).toEqual({ prism: 12, mortimer: 10, ulysses: 0, warden: 0 });
-    expect(parseRosterParam('prism:12,mortimer:10,ulysses:8')).toEqual({ prism: 12, mortimer: 10, ulysses: 8, warden: 0 });
-    expect(parseRosterParam('prism:15,mortimer:15,ulysses:15,warden:15')).toEqual({ prism: 15, mortimer: 15, ulysses: 15, warden: 15 });
-    expect(parseRosterParam('warden:7')).toEqual({ prism: 0, mortimer: 0, ulysses: 0, warden: 7 });
-    expect(parseRosterParam('mortimer:25')).toEqual({ prism: 0, mortimer: 20, ulysses: 0, warden: 0 });
-    expect(parseRosterParam('prism:99')).toEqual({ prism: 20, mortimer: 0, ulysses: 0, warden: 0 });
-    expect(parseRosterParam('prism:-4,nobody:5')).toEqual({ prism: 0, mortimer: 0, ulysses: 0, warden: 0 });
+    expect(parseRosterParam('prism:12')).toEqual({ prism: 12, mortimer: 0, ulysses: 0, warden: 0, ember: 0 });
+    expect(parseRosterParam('prism:12,mortimer:10')).toEqual({ prism: 12, mortimer: 10, ulysses: 0, warden: 0, ember: 0 });
+    expect(parseRosterParam('prism:12,mortimer:10,ulysses:8')).toEqual({ prism: 12, mortimer: 10, ulysses: 8, warden: 0, ember: 0 });
+    expect(parseRosterParam('prism:15,mortimer:15,ulysses:15,warden:15,ember:15')).toEqual({ prism: 15, mortimer: 15, ulysses: 15, warden: 15, ember: 15 });
+    expect(parseRosterParam('ember:9')).toEqual({ prism: 0, mortimer: 0, ulysses: 0, warden: 0, ember: 9 });
+    expect(parseRosterParam('warden:7')).toEqual({ prism: 0, mortimer: 0, ulysses: 0, warden: 7, ember: 0 });
+    expect(parseRosterParam('mortimer:25')).toEqual({ prism: 0, mortimer: 20, ulysses: 0, warden: 0, ember: 0 });
+    expect(parseRosterParam('prism:99')).toEqual({ prism: 20, mortimer: 0, ulysses: 0, warden: 0, ember: 0 });
+    expect(parseRosterParam('prism:-4,nobody:5')).toEqual({ prism: 0, mortimer: 0, ulysses: 0, warden: 0, ember: 0 });
     expect(parseRosterParam('nobody:5')).toBeNull();
     expect(parseRosterParam('prism')).toBeNull();
     expect(parseRosterParam(null)).toBeNull();
   });
   it('normalizes to every registered id and sums levels', () => {
-    expect(normalizeRoster({})).toEqual({ prism: 0, mortimer: 0, ulysses: 0, warden: 0 });
+    expect(normalizeRoster({})).toEqual({ prism: 0, mortimer: 0, ulysses: 0, warden: 0, ember: 0 });
     expect(totalLevel({ prism: 7 })).toBe(7);
   });
 });

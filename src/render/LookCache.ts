@@ -81,6 +81,8 @@ export class LookCache {
 
   /** The solid look of a bullet (shape and size, never color or alpha: those are tint and sprite alpha). */
   bullet(b: Bullet): Look {
+    // A ring is drawn as stretched chord segments of a line look `b` thick (see BattleView).
+    if (b.shape === 'ring') return this.line(b.b);
     if (b.shape === 'circle') {
       // Size buckets: radius rounded up to the next bucket; the sprite scales it down to the exact radius.
       const r = Math.max(0.5, b.a);
