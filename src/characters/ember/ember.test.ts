@@ -20,7 +20,7 @@ describe('Ember config', () => {
   it('validates, and is registered as slot 6 with the flame shape', () => {
     expect(validateConfig(emberConfig)).toEqual([]);
     expect(registry[5]).toMatchObject({ id: 'ember', shape: 'flame', maxLevel: 20 });
-    expect(registry.length).toBe(7);
+    expect(registry.length).toBe(8);
   });
   it('embers 1-20; sweep joins at 6; wildfire at 15', () => {
     for (const l of [1, 5]) expect(attacksAt(l)).toEqual(['embers']);

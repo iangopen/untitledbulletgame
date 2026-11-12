@@ -21,7 +21,7 @@ export function at<T extends HTMLElement | SVGElement>(el: T, x: number, y: numb
   return el;
 }
 
-export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose' | 'bolt';
+export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose' | 'bolt' | 'dagger';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -90,6 +90,11 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
     node = document.createElementNS(SVG_NS, 'path');
     const k = r;
     node.setAttribute('d', `M ${0.12 * k} ${-k} C ${0.35 * k} ${-0.45 * k} ${0.78 * k} ${-0.1 * k} ${0.7 * k} ${0.35 * k} A ${0.7 * k} ${0.62 * k} 0 0 1 ${-0.7 * k} ${0.35 * k} C ${-0.72 * k} ${-0.05 * k} ${-0.3 * k} ${-0.4 * k} ${0.12 * k} ${-k} Z`);
+  } else if (kind === 'dagger') {
+    // A dagger, point up: a long double-edged blade, a crossguard, a grip and a pommel.
+    node = document.createElementNS(SVG_NS, 'path');
+    const k = r;
+    node.setAttribute('d', `M 0 ${-k} L ${0.17 * k} ${-0.62 * k} L ${0.14 * k} ${0.22 * k} L ${0.5 * k} ${0.22 * k} L ${0.5 * k} ${0.36 * k} L ${0.1 * k} ${0.36 * k} L ${0.1 * k} ${0.74 * k} L ${0.2 * k} ${0.82 * k} L 0 ${k} L ${-0.2 * k} ${0.82 * k} L ${-0.1 * k} ${0.74 * k} L ${-0.1 * k} ${0.36 * k} L ${-0.5 * k} ${0.36 * k} L ${-0.5 * k} ${0.22 * k} L ${-0.14 * k} ${0.22 * k} L ${-0.17 * k} ${-0.62 * k} Z`);
   } else if (kind === 'bolt') {
     // A lightning bolt: a slanted zigzag with a pointed bottom.
     node = document.createElementNS(SVG_NS, 'path');

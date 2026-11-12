@@ -39,9 +39,9 @@ describe('HUD bands', () => {
     expect(w.box.y + w.box.halfHeight).toBeLessThan(hud.bottom.y);
   });
 
-  it('all seven characters at 20 for 40 s (box shoved, tossed and split): no spawn or gold-forming stage lands in a HUD band', () => {
+  it('all eight characters at 20 for 40 s (box shoved, tossed and split): no spawn or gold-forming stage lands in a HUD band', () => {
     const w = new World(VIEW.cx, VIEW.cy + 9);
-    const d = new Director(w, { rose: 20, prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20, volt: 20 }, new TimerMode(60));
+    const d = new Director(w, { rose: 20, prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20, volt: 20, vesper: 20 }, new TimerMode(60));
     const seen = new Set<Bullet>();
     let splitSteps = 0, boxInBand = 0, scaledSteps = 0, scaledSpawns = 0, minScale = 1;
     let blooms = 0, bloomInBand = 0, prismDecor = 0, prismDecorBad = 0;
@@ -95,7 +95,7 @@ describe('HUD bands', () => {
       for (const b of [...seen]) if (!b.active) seen.delete(b);
     }
     // eslint-disable-next-line no-console
-    console.log(`HUD bands, all seven at 20 for 40 s: tossed ${(scaledSteps / 60).toFixed(1)} s (min scale ${minScale.toFixed(2)}, ${scaledSpawns} spawns while tossed); ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band; split ${(splitSteps / 60).toFixed(1)} s, box steps in a band or off screen ${boxInBand}`);
+    console.log(`HUD bands, all eight at 20 for 40 s: tossed ${(scaledSteps / 60).toFixed(1)} s (min scale ${minScale.toFixed(2)}, ${scaledSpawns} spawns while tossed); ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band; split ${(splitSteps / 60).toFixed(1)} s, box steps in a band or off screen ${boxInBand}`);
     // eslint-disable-next-line no-console
     console.log(`Rose bloom steps ${blooms}, in a band ${bloomInBand}; Prism mirror/emitter steps ${prismDecor}, off screen or in a band ${prismDecorBad}`);
     expect(spawnInBand).toBe(0);
