@@ -19,7 +19,7 @@ export interface GameEvents {
    * Prism's phase changed. `phase` is what runs now ('breather' = no new arrivals); `next` is the
    * phase that follows (for a breather) or the current one.
    */
-  prismPhaseChanged: { owner: string; phase: 'rest' | 'ray' | 'breather'; next: 'rest' | 'ray' };
+  prismPhaseChanged: { owner: string; phase: 'ray' | 'mirrors' | 'blaster' | 'breather'; next: 'ray' | 'mirrors' | 'blaster' };
   /** Rose: one phase per unlocked attack. */
   rosePhaseChanged: { owner: string; phase: 'volley' | 'vine' | 'bloom' | 'breather'; next: 'volley' | 'vine' | 'bloom' };
   /** Mortimer's phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */

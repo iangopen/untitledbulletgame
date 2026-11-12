@@ -44,7 +44,7 @@ describe('HUD bands', () => {
     const d = new Director(w, { rose: 20, prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20 }, new TimerMode(60));
     const seen = new Set<Bullet>();
     let splitSteps = 0, boxInBand = 0, scaledSteps = 0, scaledSpawns = 0, minScale = 1;
-    let blooms = 0, bloomInBand = 0;
+    let blooms = 0, bloomInBand = 0, prismDecor = 0, prismDecorBad = 0;
     let spawns = 0, onScreenSpawns = 0, spawnInBand = 0, goldSteps = 0, goldInBand = 0, passingInBand = 0;
     // The Director's step, split so spawns are measured where they spawn (before the world moves them).
     const tick = () => d.characters.forEach((c) => c.tick(STEP));
@@ -72,6 +72,12 @@ describe('HUD bands', () => {
           const a = screenAabb(w, b);
           if (a && inBand(a)) bloomInBand++;
         }
+        // Prism's mirrors and blaster emitters (decor) stand outside the box, on screen, out of the bands.
+        if (b.active && b.decor && b.owner === 'prism') {
+          prismDecor++;
+          const a = screenAabb(w, b);
+          if (!a || inBand(a)) prismDecorBad++;
+        }
         if (!b.active || b.decor) continue;
         const a = screenAabb(w, b);
         if (!seen.has(b)) {
@@ -91,11 +97,13 @@ describe('HUD bands', () => {
     // eslint-disable-next-line no-console
     console.log(`HUD bands, all six at 20 for 40 s: tossed ${(scaledSteps / 60).toFixed(1)} s (min scale ${minScale.toFixed(2)}, ${scaledSpawns} spawns while tossed); ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band; split ${(splitSteps / 60).toFixed(1)} s, box steps in a band or off screen ${boxInBand}`);
     // eslint-disable-next-line no-console
-    console.log(`Rose bloom steps ${blooms}, in a band ${bloomInBand}`);
+    console.log(`Rose bloom steps ${blooms}, in a band ${bloomInBand}; Prism mirror/emitter steps ${prismDecor}, off screen or in a band ${prismDecorBad}`);
     expect(spawnInBand).toBe(0);
     expect(goldInBand).toBe(0);
     expect(blooms).toBeGreaterThan(0);
     expect(bloomInBand).toBe(0);
+    expect(prismDecor).toBeGreaterThan(0);
+    expect(prismDecorBad).toBe(0);
     expect(splitSteps).toBeGreaterThan(60 * 3); // the rip at 18 s is covered
     expect(boxInBand).toBe(0);
     expect(scaledSteps).toBeGreaterThan(60 * 2); // the toss at 9 s is covered

@@ -76,7 +76,7 @@ describe('Custom grid', () => {
 describe('Debug sandbox attack lists', () => {
   it('lists every attack with its unlock level', () => {
     expect(attacksOf(registry[0]!).map((a) => `${a.id}@${a.from}`)).toEqual(['volley@1', 'vine@6', 'bloom@15']);
-    expect(attacksOf(registry[1]!)).toEqual([{ id: 'beam', from: 1 }, { id: 'prism', from: 1 }]);
+    expect(attacksOf(registry[1]!).map((a) => `${a.id}@${a.from}`)).toEqual(['beam@1', 'prism@1', 'mirrors@6', 'blaster@15']);
     expect(attacksOf(registry[4]!).map((a) => `${a.id}@${a.from}`)).toEqual(['punch@1', 'toss@6', 'rip@15']);
   });
 });
