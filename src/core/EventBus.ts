@@ -20,6 +20,8 @@ export interface GameEvents {
    * phase that follows (for a breather) or the current one.
    */
   prismPhaseChanged: { owner: string; phase: 'ray' | 'mirrors' | 'blaster' | 'breather'; next: 'ray' | 'mirrors' | 'blaster' };
+  /** Nightshade: one phase per unlocked attack. */
+  nightshadePhaseChanged: { owner: string; phase: 'spores' | 'miasma' | 'burst' | 'breather'; next: 'spores' | 'miasma' | 'burst' };
   /** Vesper: one phase per unlocked attack. */
   vesperPhaseChanged: { owner: string; phase: 'throw' | 'encircle' | 'flurry' | 'breather'; next: 'throw' | 'encircle' | 'flurry' };
   /** Volt: one phase per unlocked attack. */

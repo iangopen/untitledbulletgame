@@ -54,6 +54,8 @@ export const theme = {
   volt: 0x9a5cff,
   /** Vesper: cool steel blue-grey, roster and profile only (RGB distance > 100 from every identity and projectile color and the soul's red; tested). */
   vesper: 0x6f8ea6,
+  /** Nightshade: deep berry violet, roster and profile only (RGB distance > 100 from every identity and projectile color incl. KR magenta, the HP mint, damaging lime and the soul's red; tested). */
+  nightshade: 0x5b2f8a,
   /** Prism's refraction prism (a prop): light violet, kept distinct from blue projectiles (#2aa0ff). */
   prismProp: 0xb49cff,
   /** Mortimer: pale ice, darker and cooler than white projectiles and far lighter than blue ones. */

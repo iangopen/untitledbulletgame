@@ -21,7 +21,7 @@ export function at<T extends HTMLElement | SVGElement>(el: T, x: number, y: numb
   return el;
 }
 
-export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose' | 'bolt' | 'dagger';
+export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose' | 'bolt' | 'dagger' | 'berry';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -90,6 +90,16 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
     node = document.createElementNS(SVG_NS, 'path');
     const k = r;
     node.setAttribute('d', `M ${0.12 * k} ${-k} C ${0.35 * k} ${-0.45 * k} ${0.78 * k} ${-0.1 * k} ${0.7 * k} ${0.35 * k} A ${0.7 * k} ${0.62 * k} 0 0 1 ${-0.7 * k} ${0.35 * k} C ${-0.72 * k} ${-0.05 * k} ${-0.3 * k} ${-0.4 * k} ${0.12 * k} ${-k} Z`);
+  } else if (kind === 'berry') {
+    // A nightshade berry: a round berry under a five-pointed star-shaped calyx and a short stem.
+    node = document.createElementNS(SVG_NS, 'path');
+    const k = r;
+    const star = Array.from({ length: 10 }, (_, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const rr = i % 2 === 0 ? 0.62 * k : 0.22 * k;
+      return `${i === 0 ? 'M' : 'L'} ${(Math.cos(a) * rr).toFixed(2)} ${(-0.32 * k + Math.sin(a) * rr * 0.55).toFixed(2)}`;
+    }).join(' ');
+    node.setAttribute('d', `M ${0.62 * k} ${0.3 * k} A ${0.62 * k} ${0.62 * k} 0 1 1 ${0.619 * k} ${0.29 * k} Z ${star} Z M ${-0.06 * k} ${-0.5 * k} L ${0.06 * k} ${-0.5 * k} L ${0.12 * k} ${-k} L ${0.02 * k} ${-k} Z`);
   } else if (kind === 'dagger') {
     // A dagger, point up: a long double-edged blade, a crossguard, a grip and a pommel.
     node = document.createElementNS(SVG_NS, 'path');

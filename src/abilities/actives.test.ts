@@ -122,7 +122,7 @@ describe('slow time', () => {
     const run = () => {
       const w = new World(640, 369);
       w.ability = new SlowTime();
-      const d = new Director(w, { rose: 20, prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20, volt: 20, vesper: 20 }, new TimerMode(120));
+      const d = new Director(w, { rose: 20, prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20, volt: 20, vesper: 20, nightshade: 20 }, new TimerMode(120));
       for (let i = 0; i < 60 * 20; i++) {
         w.soul.iframes = 9;
         d.step(i % 300 === 0 ? press(RIGHT) : RIGHT, STEP);

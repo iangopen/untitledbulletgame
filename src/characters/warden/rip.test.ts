@@ -207,7 +207,7 @@ describe('The Warden rip at level 20', () => {
 
   it('all five at 20 for 60 s: every attack spawned while split or tossed aims at / forms against the soul box; nothing spawns or forms in a band', () => {
     const w = new World(640, 369);
-    const d = new Director(w, { rose: 20, prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20, volt: 20, vesper: 20 }, new TimerMode(90));
+    const d = new Director(w, { rose: 20, prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20, volt: 20, vesper: 20, nightshade: 20 }, new TimerMode(90));
     let tossSpawns = 0, tossTracked = 0, tossSteps = 0;
     const tossBy: Record<string, number> = {};
     const seen = new Set<Bullet>();
