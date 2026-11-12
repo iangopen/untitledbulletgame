@@ -77,6 +77,8 @@ export interface BulletSpec {
   form?: CompositeForm;
   /** Draw a faint decorative glow around it (light rays). Never part of the hitbox. */
   glow?: boolean;
+  /** No shine burst when it arms (Prism's laser: the warning line itself is the cue, and a laser-sized ring would be huge). */
+  noShine?: boolean;
   /**
    * A drawn OBJECT, not a projectile (The Warden's fists): never collides, never outlined by the
    * hitbox overlay, not an attack for the HUD-band rule. Drawn in `tint` with an edge outline.
@@ -122,6 +124,7 @@ export class Bullet {
   onArm: ArmHook | undefined = undefined;
   form: CompositeForm | null = null;
   glow = false;
+  noShine = false;
   decor = false;
   tint = 0;
   edgeTint = -1;
@@ -160,6 +163,7 @@ export class Bullet {
     this.onArm = s.onArm;
     this.form = s.form ?? null;
     this.glow = s.glow ?? false;
+    this.noShine = s.noShine ?? false;
     this.decor = s.decor ?? false;
     this.tint = s.tint ?? 0;
     this.edgeTint = s.edgeTint ?? -1;

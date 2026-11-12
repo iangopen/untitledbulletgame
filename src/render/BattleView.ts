@@ -408,7 +408,7 @@ export class BattleView {
       const ib = interpBullet(b, t, this.ib);
       this.drawBullet(this.bulletSprites, this.glowSprites, ib, 1);
       // Shine: the gold -> active moment (gameplay cue; see effects.shineShape).
-      const s = b.armAt > 0 ? sinceArmed(b) : -1;
+      const s = b.armAt > 0 && !b.noShine ? sinceArmed(b) : -1;
       if (s >= 0 && s < SHINE_TIME) {
         const c = box.toWorld(ib, this.tmp2);
         const sh = shineShape(bulletExtent(b), s / SHINE_TIME);
