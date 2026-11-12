@@ -21,6 +21,9 @@ export interface PrismRules {
   prismHarmless: boolean;
   /** Prism circumradius in px. */
   prismRadius: number;
+  /** Refraction prism placement: clear distance from the box wall beyond its radius (px), and how much farther out it may stand (px). */
+  prismGap: number;
+  prismSpread: number;
   /** Volley bullet circumradius (px). */
   volleySize: number;
   /** Constant distance between neighbouring volley triangles (px), at every level and on every edge. */
@@ -83,6 +86,8 @@ export const prismConfig: CharacterConfig<PrismAttack, PrismRules> = {
     refractCount: 3,
     prismHarmless: true,
     prismRadius: px(28),
+    prismGap: px(12),
+    prismSpread: px(70),
     volleySize: px(6),
     volleySpacing: px(22),
     beamThickness: px(4),

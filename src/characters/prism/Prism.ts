@@ -7,7 +7,7 @@ import { line, lineOffset } from '../../combat/patterns';
 import { bulletExtent } from '../../combat/Bullet';
 import { maxOffscreenDistance, offscreenStart } from '../../combat/offscreen';
 import { propTriangle, type Prop } from '../../core/World';
-import { theme } from '../../render/theme';
+import { hud, theme, VIEW } from '../../render/theme';
 import { px } from '../../tuning';
 import { prismConfig, type PrismAttack, type PrismPhase, type PrismRules } from './prism.config';
 
@@ -103,24 +103,29 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     const extent = bulletExtent({ shape: 'beam', a: p.length!, b: this.rules.beamThickness });
     const shots: Shot[] = [];
     for (let i = 0; i < p.count!; i++) {
-      const edge = EDGES[Math.floor(this.rng() * 4)]!;
-      const [nx, ny] = INWARD[edge];
+      let edge = EDGES[Math.floor(this.rng() * 4)]!;
       const u = this.rng() * 1.6 - 0.8; // position along the edge, -0.8..0.8 of half length
+      let angle = (this.rng() - 0.5) * 0.7;
+      const aimed = !!(prismP && this.rng() < prismP.aimChance!) && this.prop !== null;
+      // Aimed rays enter through the wall facing the prism (which stands outside the box).
+      if (aimed) edge = this.prop!.x < 0 ? 'left' : 'right';
+      const [nx, ny] = INWARD[edge];
       const ex = nx !== 0 ? -nx * box.halfWidth : u * box.halfWidth;
       const ey = ny !== 0 ? -ny * box.halfHeight : u * box.halfHeight;
-      let angle = Math.atan2(ny, nx) + (this.rng() - 0.5) * 0.7;
-      // Aim is decided at plan time; the beam re-aims at the prism when it fires (if it is up by then).
-      const aimed = !!(prismP && this.rng() < prismP.aimChance!);
-      if (aimed && this.prop) angle = Math.atan2(this.prop!.y - ey, this.prop!.x - ex);
-      const start = offscreenStart(box, ex, ey, angle, extent);
-      shots.push({
-        lead: start.distance / p.speed!,
-        fire: () => {
-          // Aimed beams re-aim at the prism as it is now (it may have moved since planning).
-          const a = aimed && this.prop ? Math.atan2(this.prop.y - start.y, this.prop.x - start.x) : angle;
-          this.spawnBeam(start.x, start.y, a, p.speed!, p, 0, 0, true);
-        },
-      });
+      angle += Math.atan2(ny, nx);
+      // Aimed: the ray's line runs from off screen through the prism to the wall point, so it
+      // refracts (fans into three) before entering the box. Otherwise from off screen to the wall point.
+      let start = offscreenStart(box, ex, ey, angle, extent);
+      let toBox = start.distance;
+      if (aimed) {
+        const P = this.prop!;
+        angle = Math.atan2(ey - P.y, ex - P.x);
+        start = offscreenStart(box, P.x, P.y, angle, extent);
+        toBox = start.distance + Math.hypot(ex - P.x, ey - P.y);
+      }
+      const a = angle;
+      const s = start;
+      shots.push({ lead: toBox / p.speed!, fire: () => this.spawnBeam(s.x, s.y, a, p.speed!, p, 0, 0, true) });
     }
     return shots;
   }
@@ -130,7 +135,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     const b = this.world.pool.spawn({
       shape: 'beam', x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, faceVelocity: true,
       a: p.length!, b: this.rules.beamThickness, damage: p.damage!, owner: this.id, kind: 'white',
-      gen, flags, noPop: child,
+      gen, flags, noPop: child, glow: true,
     });
     if (b) this.world.bus.emit('beamFired', { owner: this.id, x, y, angle, gen });
   }
@@ -150,8 +155,20 @@ export class Prism extends Character<PrismAttack, PrismRules> {
       this.prop = { shape: 'triangle', x: 0, y: 0, r, rotation: 0, color: this.color, refracts: true };
       this.world.props.push(this.prop);
     }
-    this.prop.x = (this.rng() * 2 - 1) * (box.halfWidth - r - px(20));
-    this.prop.y = (this.rng() * 2 - 1) * (box.halfHeight - r - px(20));
+    // Outside the box, beside its left or right wall, inside the screen and clear of the HUD bands
+    // (theme.hud), where aimed rays pass on their way in. Chosen in world space, stored box-local.
+    const side = this.rng() < 0.5 ? -1 : 1;
+    const gap = r + this.rules.prismGap;
+    const wx0 = box.x + side * (box.halfWidth + gap);
+    const wx = wx0 + side * this.rng() * this.rules.prismSpread;
+    const margin = r + px(6);
+    const x = Math.max(margin, Math.min(VIEW.width - margin, wx));
+    const yMin = Math.max(hud.top.y + hud.top.height + margin, box.y - box.halfHeight);
+    const yMax = Math.min(hud.bottom.y - margin, box.y + box.halfHeight);
+    const y = yMin + this.rng() * Math.max(0, yMax - yMin);
+    const local = box.toLocal({ x, y });
+    this.prop.x = local.x;
+    this.prop.y = local.y;
     this.prop.rotation = this.rng() * Math.PI * 2;
   }
 

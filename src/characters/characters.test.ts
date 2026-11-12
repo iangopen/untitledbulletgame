@@ -6,6 +6,7 @@ import { registry } from './registry';
 import { World } from '../core/World';
 import { EventBus, type GameEvents } from '../core/EventBus';
 import { SCREEN_HEIGHT, SCREEN_WIDTH } from '../tuning';
+import { hud } from '../render/theme';
 import type { Bullet } from '../combat/Bullet';
 import { STEP } from '../core/Clock';
 
@@ -323,6 +324,46 @@ describe('Prism behaviour', () => {
     expect(w.props.length).toBe(0);
     p.setLevel(0);
     expect(w.props.length).toBe(0);
+  });
+  it('refraction prisms stand only outside the box, on screen, clear of the HUD bands; refracted rays still reach the box', () => {
+    const w = new World(640, 369);
+    const p = new Prism(w, 1);
+    p.setLevel(20);
+    const placed: string[] = [];
+    let last = '';
+    let inside = 0;
+    let refractedEntered = 0;
+    const seen = new Set<Bullet>();
+    const r = prismConfig.rules.prismRadius;
+    for (let i = 0; i < 60 * 40; i++) {
+      p.tick(STEP);
+      w.step(still, STEP);
+      w.soul.iframes = 1;
+      const prop = p.prop;
+      if (prop) {
+        const key = `${prop.x.toFixed(1)},${prop.y.toFixed(1)}`;
+        if (key !== last) {
+          last = key;
+          const wp = w.box.toWorld(prop);
+          placed.push(`(${wp.x.toFixed(0)}, ${wp.y.toFixed(0)})@${w.time.toFixed(1)}`);
+          // The whole prism (its circumcircle) is outside the box, on screen, outside the bands.
+          if (Math.abs(prop.x) < w.box.halfWidth + r && Math.abs(prop.y) < w.box.halfHeight + r) inside++;
+          expect(wp.x - r).toBeGreaterThan(0);
+          expect(wp.x + r).toBeLessThan(SCREEN_WIDTH);
+          expect(wp.y - r).toBeGreaterThan(hud.top.y + hud.top.height);
+          expect(wp.y + r).toBeLessThan(hud.bottom.y);
+        }
+      }
+      for (const b of w.pool.all) {
+        if (!b.active || seen.has(b) || !(b.flags & REFRACTED)) continue;
+        if (Math.abs(b.x) <= w.box.halfWidth && Math.abs(b.y) <= w.box.halfHeight) { seen.add(b); refractedEntered++; }
+      }
+    }
+    // eslint-disable-next-line no-console
+    console.log(`L20 prism placements (world): ${placed.join(' ')}; inside the box: ${inside}; refracted rays that entered the box: ${refractedEntered}`);
+    expect(placed.length).toBeGreaterThan(2);
+    expect(inside).toBe(0);
+    expect(refractedEntered).toBeGreaterThan(0);
   });
   it('a beam through the prism becomes exactly three that ignore prisms', () => {
     const w = new World(0, 0);
