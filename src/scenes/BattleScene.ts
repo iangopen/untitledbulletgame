@@ -206,6 +206,7 @@ export class BattleScene extends Phaser.Scene {
     this.pauseIndex = 0;
     this.renderPause();
     this.pauseEl.style.display = '';
+    ui.disarmHover(); // an idle cursor over a pause item doesn't select it until the mouse moves
     this.hintEl.style.visibility = 'hidden';
     this.pauseBtn.style.visibility = 'hidden';
   }

@@ -13,6 +13,9 @@ import { h } from './dom';
  *   prevented), so keyboard play is unaffected by clicking the UI.
  * - Geometry: the overlay copies the canvas's on-page rect (watched with ResizeObserver), so UI and
  *   canvas stay aligned at any window size or pixel ratio.
+ * - Hover selects only after the mouse moves: when a screen appears (or `disarmHover()` is called),
+ *   mouseenter / mouseover are swallowed until a mousemove with real movement; then the elements
+ *   under the cursor get their mouseenter once. An idle cursor never steals the selection.
  * - Under-layer: a second, identical root BELOW the canvas, for HUD text that bullets pass over (the
  *   battle HUD). The battle camera clears transparent, so the text shows through wherever nothing is
  *   drawn and bullets are always drawn on top of it. It takes no mouse input (the canvas covers it).
@@ -26,6 +29,10 @@ class UiLayer {
   private screen: HTMLElement | null = null;
   private under: HTMLElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
+  /** False from show() / disarmHover() until the mouse really moves (see the rules above). */
+  hoverArmed = false;
+  /** Last cursor position seen by any mousemove (null until the first one in this page). */
+  private lastPos: { x: number; y: number } | null = null;
 
   /** Scale from layout px to CSS px (exposed for tests and diagnostics). */
   scale = 1;
@@ -54,6 +61,13 @@ class UiLayer {
     this.overlay.addEventListener('mousedown', (e) => e.preventDefault());
     this.overlay.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
     this.overlay.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Hover after move: swallow enter/over while disarmed (capture runs before the targets' handlers).
+    const gate = (e: Event) => {
+      if (!this.hoverArmed) e.stopPropagation();
+    };
+    this.overlay.addEventListener('mouseenter', gate, true);
+    this.overlay.addEventListener('mouseover', gate, true);
+    window.addEventListener('mousemove', (e) => this.onMove(e), true);
 
     const sync = () => this.sync();
     window.addEventListener('resize', sync);
@@ -117,6 +131,29 @@ class UiLayer {
     }
     this.screen = screen;
     this.under = under ?? null;
+    this.hoverArmed = false;
+  }
+
+  /** Hover stops selecting until the mouse moves again (called when a screen or overlay menu appears). */
+  disarmHover(): void {
+    this.hoverArmed = false;
+  }
+
+  private onMove(e: MouseEvent): void {
+    const prev = this.lastPos;
+    this.lastPos = { x: e.clientX, y: e.clientY };
+    if (this.hoverArmed) return;
+    // Real movement only: Chrome fires synthetic mousemoves at the current position after layout
+    // changes. movementX/Y alone is not enough (the first event in a new page reports 0 even when
+    // the cursor moved), so a change of position also counts.
+    const moved = e.movementX !== 0 || e.movementY !== 0 || (prev !== null && (prev.x !== e.clientX || prev.y !== e.clientY));
+    if (!moved) return;
+    this.hoverArmed = true;
+    // The elements already under the cursor were 'entered' while disarmed: give them mouseenter now.
+    const chain: Element[] = [];
+    for (let el = document.elementFromPoint(e.clientX, e.clientY); el && el !== this.overlay; el = el.parentElement) chain.push(el);
+    if (!chain.length || !this.overlay?.contains(chain[0]!)) return;
+    for (const el of chain.reverse()) el.dispatchEvent(new MouseEvent('mouseenter', { clientX: e.clientX, clientY: e.clientY }));
   }
 
   /** Fade the current screen out (scene transitions call this alongside the camera fade). */
