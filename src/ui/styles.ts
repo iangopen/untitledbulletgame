@@ -66,6 +66,21 @@ export const UI_CSS = `
 :is(#ui-root, #ui-under-root) .arrow:hover { color: ${c(theme.text)}; }
 :is(#ui-root, #ui-under-root) .level.zero { color: ${c(theme.textDim)}; }
 
+/* Roster loadout picker: a row label, then options (icon + name). Equipped = bright with a thin
+   underline; in the focused row the equipped option also gets the red dot. Hover = bright. */
+:is(#ui-root, #ui-under-root) .lrow-label { color: ${c(theme.textMuted)}; }
+:is(#ui-root, #ui-under-root) .lrow-label.focus { color: ${c(theme.text)}; }
+:is(#ui-root, #ui-under-root) .lopt { display: flex; align-items: center; gap: 8px; color: ${c(theme.textDim)}; padding: 6px 2px; opacity: 0.55; }
+:is(#ui-root, #ui-under-root) .lopt svg { flex: none; }
+:is(#ui-root, #ui-under-root) .lopt.eq, :is(#ui-root, #ui-under-root) .lopt:hover { color: ${c(theme.text)}; opacity: 1; }
+:is(#ui-root, #ui-under-root) .lopt .uline { position: absolute; left: 0; right: 0; bottom: 0; height: ${line.thin}px; background: ${c(theme.text)}; visibility: hidden; }
+:is(#ui-root, #ui-under-root) .lopt.eq .uline { visibility: visible; }
+:is(#ui-root, #ui-under-root) .lopt .dot {
+  position: absolute; right: calc(100% + 6px); top: 50%; width: 10px; height: 10px;
+  margin-top: -5px; border-radius: 50%; background: ${c(theme.soul)}; visibility: hidden;
+}
+:is(#ui-root, #ui-under-root) .lopt.eq.focus .dot { visibility: visible; }
+
 /* Settings rows: label left, ‹ value › right; the red dot sits left of the row like menus. */
 :is(#ui-root, #ui-under-root) .srow { width: 560px; display: flex; justify-content: space-between; align-items: center; }
 :is(#ui-root, #ui-under-root) .srow .val { display: flex; align-items: center; gap: 2px; }

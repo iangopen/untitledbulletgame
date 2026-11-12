@@ -25,6 +25,37 @@ export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' 
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/**
+ * A small line icon for an ability (loadout picker), drawn in currentColor so it follows the
+ * option's dim / bright state. Unknown ids (and none) get a slashed circle.
+ */
+export function abilityIcon(id: string | null, size = 22): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('viewBox', '-12 -12 24 24');
+  const paths: Record<string, string> = {
+    dash: 'M -10 0 H 6 M 1 -6 L 8 0 L 1 6 M -10 -5 H -4 M -10 5 H -4',
+    shield: 'M 0 -10 A 10 10 0 1 1 -0.01 -10 M -4 -2 A 5 5 0 0 1 2 -5',
+    slow: 'M -7 -10 H 7 M -7 10 H 7 M -6 -10 L 6 10 M 6 -10 L -6 10',
+    blink: 'M -10 4 A 2 2 0 1 0 -6 4 A 2 2 0 1 0 -10 4 M -3 0 H 1 M 4 -4 A 5 5 0 1 1 3.99 -4',
+    thickSkin: 'M 0 9 L -9 0 A 4.5 4.5 0 0 1 0 -6 A 4.5 4.5 0 0 1 9 0 Z',
+    afterglow: 'M 4 0 A 4 4 0 1 1 3.99 0 M 0 -11 V -7 M 0 7 V 11 M -11 0 H -7 M 7 0 H 11 M -8 -8 L -5 -5 M 5 5 L 8 8 M 8 -8 L 5 -5 M -5 5 L -8 8',
+    quickCharge: 'M 2 -11 L -6 2 H 0 L -2 11 L 6 -2 H 0 Z',
+    steady: 'M -10 -5 H 10 M -10 0 H 10 M -10 5 H 10',
+    none: 'M 8 0 A 8 8 0 1 1 7.99 0 M -6 6 L 6 -6',
+  };
+  const p = document.createElementNS(SVG_NS, 'path');
+  p.setAttribute('d', paths[id ?? 'none'] ?? paths.none!);
+  p.setAttribute('fill', 'none');
+  p.setAttribute('stroke', 'currentColor');
+  p.setAttribute('stroke-width', '1.8');
+  p.setAttribute('stroke-linejoin', 'round');
+  p.setAttribute('stroke-linecap', 'round');
+  svg.append(p);
+  return svg;
+}
+
 /** Flat shape (or thin outline) as inline SVG, so it is vector-sharp at any scaling. r = circumradius. */
 export function shape(kind: ShapeKind, color: number, r: number, outline = false, strokeWidth = 2): SVGSVGElement {
   const pad = outline ? strokeWidth : 0;
