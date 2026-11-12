@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { registry } from '../characters/registry';
-import { GRID_SLOTS, buildGrid, changeSlotLevel, moveInGrid, setAllLevels } from './grid';
+import { GRID_SLOTS, addAllLevels, pointValue, buildGrid, changeSlotLevel, moveInGrid, setAllLevels } from './grid';
 import { cycleOption, pickAndSave } from './loadoutPick';
 import { DEFAULT_LOADOUT, loadLoadout } from '../abilities/loadout';
 import { lastRoster, normalizeRoster, parseRosterParam, rememberRoster } from '../director/roster';
@@ -45,6 +45,19 @@ describe('Custom grid', () => {
     expect(setAllLevels(grid, 20)).toEqual({ prism: 20, mortimer: 20, ulysses: 20, warden: 20, ember: 20 });
     expect(Object.values(setAllLevels(grid, 0))).toEqual([0, 0, 0, 0, 0]);
     expect(setAllLevels(grid, 99).prism).toBe(20);
+  });
+  it('adds one to every real character, clamping at 20', () => {
+    const r = addAllLevels(normalizeRoster({ prism: 19, mortimer: 20, ulysses: 0, warden: 5 }), grid, 1);
+    expect(r).toEqual({ prism: 20, mortimer: 20, ulysses: 1, warden: 6, ember: 1 });
+    expect(addAllLevels(r, grid, 1)).toMatchObject({ prism: 20, mortimer: 20, ulysses: 2 });
+    let all = normalizeRoster({});
+    for (let i = 0; i < 25; i++) all = addAllLevels(all, grid, 1);
+    expect(Object.values(all)).toEqual([20, 20, 20, 20, 20]);
+  });
+  it('point value is the level sum times 10', () => {
+    expect(pointValue(normalizeRoster({}))).toBe(0);
+    expect(pointValue(normalizeRoster({ prism: 3, ember: 7 }))).toBe(100);
+    expect(pointValue(setAllLevels(grid, 20))).toBe(1000);
   });
   it('moves in 2D and wraps', () => {
     expect(moveInGrid(0, -1, 0)).toBe(9);

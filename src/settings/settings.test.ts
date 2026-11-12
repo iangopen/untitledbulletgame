@@ -16,7 +16,7 @@ function memStore(init: Record<string, string> = {}) {
 }
 
 describe('settings load/save', () => {
-  const custom: Settings = { frameDivisor: 2, quality: 'balanced', showFps: true, shake: false, flash: false };
+  const custom: Settings = { frameDivisor: 2, quality: 'balanced', showFps: true, shake: false, flash: false, charInfo: false };
 
   it('round-trips through its own versioned key', () => {
     const st = memStore();

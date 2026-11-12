@@ -54,21 +54,26 @@ export const UI_CSS = `
 :is(#ui-root, #ui-under-root) .opt .note { position: absolute; left: calc(100% + ${space.sm}px); top: 50%; transform: translateY(-40%);
   font-size: ${type.hint}px; color: ${c(theme.textMuted)}; }
 
-/* Custom grid: portraits (thin frame, black fill) with ‹ level › beneath. Selected = bright frame and
-   an accent underline; level 0 dims the icon; placeholders are black, locked (not-allowed cursor). */
-:is(#ui-root, #ui-under-root) .cell { position: absolute; width: 0; height: 0; }
-:is(#ui-root, #ui-under-root) .cell .portrait { position: absolute; left: -32px; top: -32px; width: 64px; height: 64px; box-sizing: border-box;
-  border: ${line.thin}px solid ${c(theme.rule)}; background: #000; display: flex; align-items: center; justify-content: center; }
-:is(#ui-root, #ui-under-root) .cell.zero .portrait svg { opacity: 0.45; }
-:is(#ui-root, #ui-under-root) .cell.last .portrait { border-color: ${c(theme.textMuted)}; }
-:is(#ui-root, #ui-under-root) .cell.sel .portrait { border-color: ${c(theme.text)}; }
-:is(#ui-root, #ui-under-root) .cell .level { color: ${c(theme.text)}; }
-:is(#ui-root, #ui-under-root) .cell.zero .level { color: ${c(theme.textDim)}; }
-:is(#ui-root, #ui-under-root) .cell .arrow { font-size: 20px; padding: 2px 8px; }
-:is(#ui-root, #ui-under-root) .cell.sel .arrow { color: ${c(theme.textDim)}; }
-:is(#ui-root, #ui-under-root) .cell .uline { position: absolute; left: -20px; width: 40px; top: 66px; height: ${line.thin}px; background: var(--accent); visibility: hidden; }
-:is(#ui-root, #ui-under-root) .cell.sel .uline { visibility: visible; }
-:is(#ui-root, #ui-under-root) .info-desc { position: absolute; width: 330px; white-space: normal; line-height: 1.45; }
+/* Custom grid (UCN layout): one block of equal square portraits packed edge to edge; the container's
+   rule color shows through the thin gaps as borders. Level in the bottom-right corner (bold mono);
+   the selected portrait gets a thin bright inset frame and its ‹ › arrows on the lower edge.
+   Placeholders: plain black, no number, no arrows. */
+:is(#ui-root, #ui-under-root) .ugrid { position: absolute; box-sizing: border-box; display: grid; padding: 2px; gap: 2px;
+  grid-template-columns: repeat(10, 1fr); grid-template-rows: repeat(5, 1fr); background: ${c(theme.rule)}; }
+:is(#ui-root, #ui-under-root) .ucell { position: relative; background: #000; display: flex; align-items: center; justify-content: center; }
+:is(#ui-root, #ui-under-root) .ucell.real { background: ${c(theme.background)}; }
+:is(#ui-root, #ui-under-root) .ucell.zero svg { opacity: 0.4; }
+:is(#ui-root, #ui-under-root) .ucell.sel { box-shadow: inset 0 0 0 2px ${c(theme.text)}; }
+:is(#ui-root, #ui-under-root) .ucell.ph.sel { box-shadow: inset 0 0 0 2px ${c(theme.textMuted)}; }
+:is(#ui-root, #ui-under-root) .ulv { position: absolute; right: 7px; bottom: 4px; font-size: 22px; font-weight: 600; color: ${c(theme.text)}; }
+:is(#ui-root, #ui-under-root) .ucell.zero .ulv { color: ${c(theme.textDim)}; }
+:is(#ui-root, #ui-under-root) .uarrow { position: absolute; bottom: 2px; font-size: 22px; line-height: 1; padding: 2px 6px; color: ${c(theme.textDim)}; visibility: hidden; }
+:is(#ui-root, #ui-under-root) .uarrow.l { left: 2px; }
+:is(#ui-root, #ui-under-root) .uarrow.r { left: 26px; }
+:is(#ui-root, #ui-under-root) .uarrow:hover { color: ${c(theme.text)}; }
+:is(#ui-root, #ui-under-root) .ucell.sel .uarrow { visibility: visible; }
+:is(#ui-root, #ui-under-root) .uinfo { position: absolute; display: flex; flex-direction: column; gap: 10px; white-space: nowrap; }
+:is(#ui-root, #ui-under-root) .readrow { display: flex; gap: 14px; align-items: baseline; }
 :is(#ui-root, #ui-under-root) .arrow { font-size: 14px; color: ${c(theme.textMuted)}; padding: 6px 10px; }
 :is(#ui-root, #ui-under-root) .arrow:hover { color: ${c(theme.text)}; }
 :is(#ui-root, #ui-under-root) .section { color: ${c(theme.textMuted)}; }

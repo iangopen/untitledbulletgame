@@ -1,22 +1,43 @@
 import Phaser from 'phaser';
 import { VIEW, theme, toCss } from '../render/theme';
-import { lastRoster, normalizeRoster, rememberRoster, totalLevel, type Roster } from '../director/roster';
-import { GRID_COLS, GRID_SLOTS, buildGrid, changeSlotLevel, moveInGrid, setAllLevels, type GridSlot } from '../menus/grid';
+import { lastRoster, normalizeRoster, rememberRoster, type Roster } from '../director/roster';
+import {
+  GRID_COLS, GRID_ROWS, GRID_SLOTS, addAllLevels, buildGrid, changeSlotLevel, moveInGrid, pointValue, setAllLevels, type GridSlot,
+} from '../menus/grid';
 import { at, h, replay, shape } from '../ui/dom';
 import { enter, go, mountScreen } from './ui';
+import { settings } from '../settings/store';
 
-/** Grid geometry (layout px): portrait centers, size, and the level row beneath each portrait. */
-const GRID_X0 = 84;
-const GRID_Y0 = 150;
-const COL_PITCH = 78;
-const ROW_PITCH = 110;
-const LEVEL_DY = 50;
-/** Side panel (info, set all, difficulty, fight, back), left edge. */
-const PANEL_X = 900;
+/**
+ * Layout (1280x720 layout px). The grid is one uniform block of square portraits packed edge to
+ * edge: a CSS grid of CELL x CELL cells with LINE px rules between them (the container's
+ * background shows through the gaps), so every portrait is exactly the same size at any scale.
+ */
+export const CELL = 86;
+export const LINE = 2;
+export const GRID_X = 24;
+export const GRID_Y = 96;
+export const GRID_W = GRID_COLS * CELL + (GRID_COLS + 1) * LINE; // 882
+export const GRID_H = GRID_ROWS * CELL + (GRID_ROWS + 1) * LINE; // 442
+/** Right column, left edge. */
+const COL_X = 940;
+/** Info panel (under the grid). */
+const INFO_Y = GRID_Y + GRID_H + 30;
 /** Wheel delta per level step: one mouse-wheel notch (deltaY 100) = one level; trackpads accumulate. */
 const WHEEL_STEP = 100;
 
-const PANEL = ['set all to 0', 'set all to 20', 'Fight', 'Back'] as const;
+type Action = { label: string; y: number; cls: string; run: (s: RosterScene) => void };
+const ACTIONS: Action[] = [
+  { label: 'Set all 0', y: 150, cls: 't-body', run: (s) => s.setAll(0) },
+  { label: 'Add all 1', y: 188, cls: 't-body', run: (s) => s.addAll(1) },
+  { label: 'Set all 5', y: 226, cls: 't-body', run: (s) => s.setAll(5) },
+  { label: 'Set all 10', y: 264, cls: 't-body', run: (s) => s.setAll(10) },
+  { label: 'Set all 20', y: 302, cls: 't-body', run: (s) => s.setAll(20) },
+  { label: 'Char info', y: 500, cls: 't-body', run: (s) => s.toggleInfo() },
+  { label: 'Go', y: 588, cls: 't-title', run: (s) => s.start() },
+  { label: 'Back', y: 650, cls: 't-small', run: (s) => go(s, 'Menu') },
+];
+const GO = ACTIONS.findIndex((a) => a.label === 'Go');
 
 interface Cell {
   slot: GridSlot;
@@ -25,26 +46,28 @@ interface Cell {
 }
 
 /**
- * Custom (scene key 'Roster'): a UCN-style 10x5 grid of portraits, generated from the registry
- * (menus/grid.ts), with an info panel and a side panel. One selection index for the screen:
- * 0..49 = grid slots, 50.. = panel items. Hover selects; the info panel shows the last grid slot selected.
- * Mouse: click a slot's ‹ › or use the wheel over it to change its level; click panel items.
- * Keyboard: WASD move on the grid, arrows change the selected slot's level (↑ → up, ↓ ← down),
- * Tab switches grid / panel (W S or ↑ ↓ in the panel, Enter activates), Z / X all 0 / 20,
+ * Custom (scene key 'Roster'), laid out like UCN's custom night screen: a 10x5 block of uniform
+ * portraits on the left (generated from the registry, menus/grid.ts), the title, level buttons,
+ * readouts, the Char info toggle and Go on the right. One selection index: 0..49 = portraits,
+ * 50.. = right-column items. Hover selects (after the mouse moves, UiLayer); the selected real
+ * portrait shows ‹ › on its lower edge, which lower / raise its level; the wheel over a portrait
+ * changes it too. Keyboard: WASD move on the grid, arrows change the selected level (↑ → up,
+ * ↓ ← down), Tab switches grid / column (↑ ↓ / W S and Enter there), Z / X set all 0 / 20,
  * Enter fights from the grid, Esc back to the menu.
  */
 export class RosterScene extends Phaser.Scene {
   private levels: Roster = {};
   private grid: GridSlot[] = [];
   private cells: Cell[] = [];
-  private panel: HTMLElement[] = [];
+  private items: HTMLElement[] = [];
   private sel = 0;
-  /** Last grid slot selected (the info panel shows it while the side panel has focus). */
   private gridSel = 0;
   private wheelAcc = 0;
+  private info!: HTMLElement;
   private infoTitle!: HTMLElement;
   private infoDesc!: HTMLElement;
-  private total!: HTMLElement;
+  private points!: HTMLElement;
+  private infoVal!: HTMLElement;
 
   constructor() {
     super('Roster');
@@ -56,35 +79,47 @@ export class RosterScene extends Phaser.Scene {
     rememberRoster(this.levels);
     this.grid = buildGrid();
     const screen = h('div');
-    screen.append(at(h('div', 't-label', 'Custom'), GRID_X0 - 32, 56, 'left'));
 
+    const block = h('div', 'ugrid');
+    Object.assign(block.style, { left: `${GRID_X}px`, top: `${GRID_Y}px`, width: `${GRID_W}px`, height: `${GRID_H}px` });
     this.cells = this.grid.map((slot) => this.makeCell(slot));
-    for (const c of this.cells) screen.append(c.el);
+    for (const c of this.cells) block.append(c.el);
+    screen.append(block);
 
-    // Info panel (fixed area): full name and a short vague line from the character's config.
-    this.infoTitle = at(h('div', 't-label'), PANEL_X, 166, 'left');
-    this.infoDesc = h('div', 'info-desc t-small dim');
-    this.infoDesc.style.left = `${PANEL_X}px`;
-    this.infoDesc.style.top = '196px';
-    screen.append(this.infoTitle, this.infoDesc);
+    // Info panel (shown only with Char info on): full name and description from the config.
+    this.info = h('div', 'uinfo');
+    Object.assign(this.info.style, { left: `${GRID_X}px`, top: `${INFO_Y}px` });
+    this.infoTitle = h('div', 't-label');
+    this.infoDesc = h('div', 't-small dim');
+    this.info.append(this.infoTitle, this.infoDesc);
+    screen.append(this.info);
 
-    const ys = [380, 424, 560, 610];
-    this.panel = PANEL.map((label, i) => {
-      const el = at(h('div', `opt ${i === 2 ? 't-label' : 't-body'} click`), PANEL_X, ys[i]!, 'left');
-      el.append(h('span', 'dot'), h('span', '', label));
+    // Right column.
+    screen.append(at(h('div', 't-title', 'Custom'), COL_X, 64, 'left'));
+    this.items = ACTIONS.map((a, i) => {
+      const el = at(h('div', `opt ${a.cls} click`), COL_X, a.y, 'left');
+      el.append(h('span', 'dot'), h('span', '', a.label));
       el.addEventListener('mouseenter', () => this.select(GRID_SLOTS + i));
       el.addEventListener('click', () => {
         this.select(GRID_SLOTS + i);
-        this.activate(i);
+        a.run(this);
       });
       screen.append(el);
       return el;
     });
-    this.total = at(h('div', 't-small mono muted'), PANEL_X, 488, 'left');
-    screen.append(
-      this.total,
-      at(h('div', 't-hint', 'wasd choose    arrows level    z / x  all 0 / 20    tab panel    enter fight    esc back'), VIEW.cx, VIEW.height - 24),
-    );
+    this.infoVal = h('span', 'note mono');
+    this.items[ACTIONS.findIndex((a) => a.label === 'Char info')]!.append(this.infoVal);
+    const readout = (label: string, y: number) => {
+      const v = h('span', 'mono');
+      const row = at(h('div', 'readrow t-small'), COL_X, y, 'left');
+      row.append(h('span', 'muted', label), v);
+      screen.append(row);
+      return v;
+    };
+    this.points = readout('Point value', 370);
+    readout('High score', 404).textContent = '—';
+    readout('Best time', 438).textContent = '—';
+    screen.append(at(h('div', 't-hint', 'wasd choose    arrows level    z / x  all 0 / 20    tab menu    enter go    esc back'), GRID_X + GRID_W / 2, VIEW.height - 20));
     mountScreen(this, screen);
 
     this.sel = 0;
@@ -96,51 +131,48 @@ export class RosterScene extends Phaser.Scene {
     on(['D'], () => this.move(1, 0));
     on(['W'], () => this.move(0, -1));
     on(['S'], () => this.move(0, 1));
-    on(['UP'], () => (this.inPanel ? this.move(0, -1) : this.change(this.sel, 1)));
-    on(['DOWN'], () => (this.inPanel ? this.move(0, 1) : this.change(this.sel, -1)));
-    on(['RIGHT'], () => (this.inPanel ? undefined : this.change(this.sel, 1)));
-    on(['LEFT'], () => (this.inPanel ? undefined : this.change(this.sel, -1)));
+    on(['UP'], () => (this.inColumn ? this.move(0, -1) : this.change(this.sel, 1)));
+    on(['DOWN'], () => (this.inColumn ? this.move(0, 1) : this.change(this.sel, -1)));
+    on(['RIGHT'], () => (this.inColumn ? undefined : this.change(this.sel, 1)));
+    on(['LEFT'], () => (this.inColumn ? undefined : this.change(this.sel, -1)));
     kb.on('keydown-TAB', (e: KeyboardEvent) => {
       e.preventDefault();
-      this.select(this.inPanel ? this.gridSel : GRID_SLOTS + 2);
+      this.select(this.inColumn ? this.gridSel : GRID_SLOTS + GO);
     });
     on(['Z'], () => this.setAll(0));
     on(['X'], () => this.setAll(20));
-    on(['ENTER'], () => (this.inPanel ? this.activate(this.sel - GRID_SLOTS) : this.start()));
+    on(['ENTER'], () => (this.inColumn ? ACTIONS[this.sel - GRID_SLOTS]!.run(this) : this.start()));
     on(['ESC'], () => go(this, 'Menu'));
 
     (window as unknown as Record<string, unknown>).__custom = { scene: this, levels: () => this.levels, sel: () => this.sel };
   }
 
-  private get inPanel(): boolean {
+  private get inColumn(): boolean {
     return this.sel >= GRID_SLOTS;
   }
 
   private makeCell(slot: GridSlot): Cell {
-    const col = slot.index % GRID_COLS;
-    const row = Math.floor(slot.index / GRID_COLS);
-    const x = GRID_X0 + col * COL_PITCH;
-    const y = GRID_Y0 + row * ROW_PITCH;
-    const el = h('div', `cell${slot.entry ? '' : ' locked'}`);
-    el.style.left = `${x}px`;
-    el.style.top = `${y}px`;
-    const portrait = h('div', `portrait ${slot.entry ? 'click' : 'no'}`);
-    el.append(portrait);
+    const el = h('div', `ucell ${slot.entry ? 'real click' : 'ph no'}`);
     let level: HTMLElement | null = null;
     if (slot.entry) {
-      el.style.setProperty('--accent', toCss(slot.entry.color));
-      portrait.append(shape(slot.entry.shape, slot.entry.color, 20));
-      level = at(h('div', 'level t-small mono', '0'), 0, LEVEL_DY);
-      const down = at(h('div', 'arrow click', '‹'), -26, LEVEL_DY);
-      const up = at(h('div', 'arrow click', '›'), 26, LEVEL_DY);
-      down.addEventListener('click', () => this.change(slot.index, -1));
-      up.addEventListener('click', () => this.change(slot.index, 1));
-      el.append(level, down, up, h('div', 'uline'));
+      el.append(shape(slot.entry.shape, slot.entry.color, 24));
+      level = h('div', 'ulv mono', '0');
+      const down = h('div', 'uarrow l click', '‹');
+      const up = h('div', 'uarrow r click', '›');
+      down.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.change(slot.index, -1);
+      });
+      up.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.change(slot.index, 1);
+      });
+      el.append(level, down, up);
       el.addEventListener('wheel', (e) => this.wheel(slot.index, e));
     }
-    // Hover and click select (placeholders too, so their info shows; they ignore level changes).
-    portrait.addEventListener('mouseenter', () => this.select(slot.index));
-    portrait.addEventListener('click', () => this.select(slot.index));
+    // Hover and click select (placeholders too, so their info shows; they have no level).
+    el.addEventListener('mouseenter', () => this.select(slot.index));
+    el.addEventListener('click', () => this.select(slot.index));
     return { slot, el, level };
   }
 
@@ -153,13 +185,12 @@ export class RosterScene extends Phaser.Scene {
   }
 
   private move(dx: number, dy: number): void {
-    if (this.inPanel) {
-      const n = PANEL.length;
+    if (this.inColumn) {
+      const n = ACTIONS.length;
       if (dy) this.select(GRID_SLOTS + ((this.sel - GRID_SLOTS + dy + n) % n));
       return;
     }
     this.select(moveInGrid(this.sel, dx, dy));
-    replay(this.cells[this.sel]!.el.firstElementChild!, 'pop');
   }
 
   private wheel(i: number, e: WheelEvent): void {
@@ -177,48 +208,55 @@ export class RosterScene extends Phaser.Scene {
     const cell = this.cells[i]!;
     const next = changeSlotLevel(this.levels, cell.slot, d);
     if (!next) {
-      replay(cell.level ?? cell.el.firstElementChild!, 'nudge'); // locked or at a limit
+      replay(cell.level ?? cell.el, 'nudge'); // placeholder or at a limit
       return;
     }
-    this.levels = next;
-    rememberRoster(next);
-    this.render();
+    this.setLevels(next);
     replay(cell.level!, 'pop');
   }
 
-  private setAll(level: number): void {
-    this.levels = setAllLevels(this.grid, level);
-    rememberRoster(this.levels);
-    for (const c of this.cells) if (c.level) replay(c.level, 'pop');
+  private setLevels(r: Roster): void {
+    this.levels = r;
+    rememberRoster(r);
     this.render();
   }
 
-  private activate(i: number): void {
-    if (i === 0) this.setAll(0);
-    else if (i === 1) this.setAll(20);
-    else if (i === 2) this.start();
-    else go(this, 'Menu');
+  setAll(level: number): void {
+    this.setLevels(setAllLevels(this.grid, level));
+    for (const c of this.cells) if (c.level) replay(c.level, 'pop');
   }
 
-  private start(): void {
+  addAll(d: number): void {
+    this.setLevels(addAllLevels(this.levels, this.grid, d));
+    for (const c of this.cells) if (c.level) replay(c.level, 'pop');
+  }
+
+  toggleInfo(): void {
+    settings.set({ charInfo: !settings.current.charInfo });
+    this.render();
+  }
+
+  start(): void {
     go(this, 'Battle', { roster: { ...this.levels } });
   }
 
   private render(): void {
     for (const c of this.cells) {
       c.el.classList.toggle('sel', c.slot.index === this.sel);
-      c.el.classList.toggle('last', c.slot.index === this.gridSel && this.inPanel);
       if (c.slot.entry && c.level) {
         const lv = this.levels[c.slot.entry.id] ?? 0;
         c.level.textContent = String(lv);
         c.el.classList.toggle('zero', lv === 0);
       }
     }
-    this.panel.forEach((p, i) => p.classList.toggle('sel', this.sel === GRID_SLOTS + i));
+    this.items.forEach((p, i) => p.classList.toggle('sel', this.sel === GRID_SLOTS + i));
+    const on = settings.current.charInfo;
+    this.infoVal.textContent = on ? 'on' : 'off';
+    this.info.style.visibility = on ? '' : 'hidden';
     const info = this.grid[this.gridSel]!;
     this.infoTitle.textContent = info.title;
     this.infoTitle.style.color = info.entry ? toCss(info.entry.color) : toCss(theme.textMuted);
     this.infoDesc.textContent = info.description;
-    this.total.textContent = `difficulty ${totalLevel(this.levels)}`;
+    this.points.textContent = String(pointValue(this.levels));
   }
 }

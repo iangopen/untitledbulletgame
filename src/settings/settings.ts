@@ -17,6 +17,8 @@ export interface Settings {
   showFps: boolean;
   shake: boolean;
   flash: boolean;
+  /** Custom screen: show the character name / description panel (Char info toggle). UI only. */
+  charInfo: boolean;
 }
 
 export const SETTINGS_VERSION = 1;
@@ -29,6 +31,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   showFps: false,
   shake: true,
   flash: true,
+  charInfo: true,
 });
 
 /** Backing-store cap (x CSS size) per quality; Full follows devicePixelRatio. */
@@ -51,7 +54,7 @@ export function parseSettings(raw: string | null | undefined): Settings {
     out.frameDivisor = d.frameDivisor as number;
   }
   if (QUALITIES.includes(d.quality as Quality)) out.quality = d.quality as Quality;
-  for (const k of ['showFps', 'shake', 'flash'] as const) if (typeof d[k] === 'boolean') out[k] = d[k];
+  for (const k of ['showFps', 'shake', 'flash', 'charInfo'] as const) if (typeof d[k] === 'boolean') out[k] = d[k];
   return out;
 }
 

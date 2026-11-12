@@ -1,5 +1,5 @@
 import { registry, type CharacterEntry } from '../characters/registry';
-import { clampLevel, type Roster } from '../director/roster';
+import { clampLevel, totalLevel, type Roster } from '../director/roster';
 
 /** The Custom screen's UCN-style portrait grid: 10 columns by 5 rows. */
 export const GRID_COLS = 10;
@@ -55,4 +55,18 @@ export function moveInGrid(index: number, dx: number, dy: number, cols = GRID_CO
   const c = ((((index % cols) + dx) % cols) + cols) % cols;
   const r = (((Math.floor(index / cols) + dy) % rows) + rows) % rows;
   return r * cols + c;
+}
+
+/** Add `delta` to every real character's level, clamped to 0..max (Add all 1). */
+export function addAllLevels(levels: Roster, grid: readonly GridSlot[], delta: number): Roster {
+  const out: Record<string, number> = { ...levels };
+  for (const s of grid) if (s.entry) out[s.entry.id] = clampLevel((levels[s.entry.id] ?? 0) + delta, s.entry);
+  return out;
+}
+
+/** Points per level on the Custom screen's Point value readout. */
+export const POINTS_PER_LEVEL = 10;
+/** Point value: the sum of all levels times POINTS_PER_LEVEL. */
+export function pointValue(levels: Roster): number {
+  return totalLevel(levels) * POINTS_PER_LEVEL;
 }
