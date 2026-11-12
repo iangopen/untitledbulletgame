@@ -5,7 +5,7 @@ import { Prism, REFRACTED } from './prism/Prism';
 import { registry } from './registry';
 import { World } from '../core/World';
 import { EventBus, type GameEvents } from '../core/EventBus';
-import { SCREEN_HEIGHT, SCREEN_WIDTH } from '../tuning';
+import { SCREEN_WIDTH } from '../tuning';
 import { hud } from '../render/theme';
 import type { Bullet } from '../combat/Bullet';
 import { STEP } from '../core/Clock';
@@ -82,11 +82,11 @@ describe('validateConfig', () => {
 
 describe('Prism bands', () => {
   const attacksAt = (l: number) => Object.keys(resolveLevel(prismConfig, l).attacks).sort();
-  it('every level 1-20 has both phases: volley (wall), beam and prism (ray)', () => {
-    for (const l of [1, 5, 6, 10, 14, 15, 20]) expect(attacksAt(l)).toEqual(['beam', 'prism', 'volley']);
+  it('every level 1-20 has Refraction only (beam and prism, ray phase); the rest slot is free for Mirrors and Blaster', () => {
+    for (const l of [1, 5, 6, 10, 14, 15, 20]) expect(attacksAt(l)).toEqual(['beam', 'prism']);
     const r = prismConfig.rules;
-    expect(r.attackPhase).toEqual({ volley: 'wall', beam: 'ray', prism: 'ray' });
-    expect(r.phaseOrder).toEqual(['wall', 'ray']);
+    expect(r.attackPhase).toEqual({ beam: 'ray', prism: 'ray' });
+    expect(r.phaseOrder).toEqual(['rest', 'ray']);
     expect(r.phaseLength).toBeGreaterThan(0);
     expect(r.breather).toBeGreaterThanOrEqual(0);
     expect(r.phaseIntensity).toBeGreaterThanOrEqual(1);
@@ -94,7 +94,7 @@ describe('Prism bands', () => {
   it('difficulty never decreases with level (more of: damage, speed, count, aim, spread; less of: cooldown, gap)', () => {
     const up = ['damage', 'speed', 'count', 'length', 'aimChance', 'refractSpread'];
     const down = ['cooldown', 'gapSize'];
-    for (const atk of ['volley', 'beam', 'prism'] as const) {
+    for (const atk of ['beam', 'prism'] as const) {
       let prev: Record<string, number> | undefined;
       for (let l = 1; l <= 20; l++) {
         const a = resolveLevel(prismConfig, l).attacks[atk]!;
@@ -137,91 +137,6 @@ describe('Prism behaviour', () => {
     expect(w.pool.activeCount).toBe(0);
     expect(w.props.length).toBe(0);
   });
-  it('volleys: constant spacing at levels 1, 10 and 20, one safe gap, all white, starting off screen', () => {
-    for (const level of [1, 10, 20]) {
-      const w = new World(640, 369);
-      const p = new Prism(w);
-      p.setLevel(level);
-      let row: Bullet[] = [];
-      const opening = new Set<Bullet>();
-      for (let i = 0; i < 60 * 12 && row.length === 0; i++) {
-        p.tick(STEP);
-        // Skip the opening row: it is pre-fired already partway in (see Character.preFire).
-        if (i === 0) w.pool.all.forEach((b) => b.active && opening.add(b));
-        row = w.pool.all.filter((b) => b.active && b.shape === 'triangle' && b.age === 0 && !opening.has(b));
-      }
-      // Rows can spawn in the same step (battle-start shift); keep the one moving like the first.
-      row = row.filter((b) => Math.sign(b.vx) === Math.sign(row[0]!.vx) && Math.sign(b.vy) === Math.sign(row[0]!.vy));
-      const r = resolveLevel(prismConfig, level).attacks.volley!;
-      const horizontal = row[0]!.vx === 0; // moving vertically = came from top/bottom
-      const along = row.map((b) => (horizontal ? b.x : b.y)).sort((a, b) => a - b);
-      const slots = Math.floor((horizontal ? w.box.width : w.box.height) / prismConfig.rules.volleySpacing);
-      expect(row.length).toBe(slots - r.gapSize!);
-      const gaps = along.slice(1).map((v, i) => +(v - along[i]!).toFixed(6));
-      const sp = prismConfig.rules.volleySpacing;
-      // Neighbours are exactly one spacing apart, except the one safe gap of gapSize missing slots.
-      expect(gaps.filter((g) => g !== sp)).toEqual(gaps.some((g) => g !== sp) ? [+(sp * (r.gapSize! + 1)).toFixed(6)] : []);
-      // eslint-disable-next-line no-console
-      console.log(`L${level}: ${row.length} triangles from ${horizontal ? 'top/bottom' : 'a side'}, spacing ${[...new Set(gaps)].join(' / ')} px (gap ${r.gapSize} slots)`);
-      for (const b of row) {
-        expect(b.kind).toBe('white');
-        const wp = w.box.toWorld(b);
-        const off = wp.x < 0 || wp.x > SCREEN_WIDTH || wp.y < 0 || wp.y > SCREEN_HEIGHT;
-        expect(off).toBe(true);
-      }
-    }
-  });
-  it('volleys reach the box on the cooldown beat (off-screen lead is planned ahead)', () => {
-    const w = new World(640, 369);
-    const p = new Prism(w);
-    p.setLevel(5);
-    const cd = resolveLevel(prismConfig, 5).attacks.volley!.cooldown!;
-    // Group triangles by the step they spawned in (one row each); a row arrives when its first
-    // triangle's center enters the box.
-    const spawnStep = new Map<Bullet, number>();
-    const rowArrival = new Map<number, number>();
-    for (let i = 0; i < 60 * 30; i++) {
-      p.tick(STEP);
-      for (const b of w.pool.all) if (b.active && b.shape === 'triangle' && !spawnStep.has(b)) spawnStep.set(b, i);
-      w.step(still, STEP);
-      w.soul.iframes = 1;
-      for (const [b, st] of spawnStep) {
-        if (!b.active || rowArrival.has(st)) continue;
-        if (Math.abs(b.x) <= w.box.halfWidth && Math.abs(b.y) <= w.box.halfHeight) rowArrival.set(st, w.time);
-      }
-      for (const b of [...spawnStep.keys()]) if (!b.active) spawnStep.delete(b);
-    }
-    const arrivals = [...rowArrival.values()].sort((a, b) => a - b);
-    const spacing = arrivals.slice(1).map((t, i) => t - arrivals[i]!);
-    // eslint-disable-next-line no-console
-    console.log(`L5 arrivals (s): ${arrivals.map((t) => t.toFixed(2)).join(' ')}`);
-    // Inside a wall phase rows arrive every cooldown / phaseIntensity; longer gaps are the ray
-    // phase and breathers (and the battle-start shift of the second row).
-    const beat = cd / prismConfig.rules.phaseIntensity;
-    const inPhase = spacing.filter((d) => d < beat * 1.5);
-    expect(inPhase.length).toBeGreaterThan(10);
-    for (const d of inPhase) expect(Math.abs(d - beat)).toBeLessThan(STEP * 2 + 1e-9);
-    for (const d of spacing.filter((d) => d >= beat * 1.5)) expect(d).toBeGreaterThan(prismConfig.rules.breather);
-  });
-  it('the first attack reaches the box about 1 s into a battle (pre-fired) at levels 1, 10 and 20', () => {
-    for (const level of [1, 10, 20]) {
-      const w = new World(640, 369);
-      const p = new Prism(w);
-      p.setLevel(level);
-      let first = -1;
-      for (let i = 0; i < 60 * 5 && first < 0; i++) {
-        p.tick(STEP);
-        w.step(still, STEP);
-        w.soul.iframes = 1;
-        const inside = w.pool.all.some((b) => b.active && Math.abs(b.x) <= w.box.halfWidth && Math.abs(b.y) <= w.box.halfHeight);
-        if (inside) first = w.time;
-      }
-      // eslint-disable-next-line no-console
-      console.log(`L${level}: first projectile reaches the box at ${first.toFixed(3)} s`);
-      expect(first).toBeGreaterThan(0.9);
-      expect(first).toBeLessThan(1.1);
-    }
-  });
   it('entering the box never fires a wall hook; leaving it does', () => {
     const w = new World(640, 369);
     const walls: string[] = [];
@@ -234,14 +149,15 @@ describe('Prism behaviour', () => {
     const p = new Prism(w);
     p.setLevel(10);
     const events: { attack: string; spawnedNow: number }[] = [];
+    // (rays arrive from 9 s, in the first ray phase)
     w.bus.on('attackStarted', (e) => events.push({ attack: e.attack, spawnedNow: w.pool.all.filter((b) => b.active && b.age === 0 && b.owner === 'prism').length }));
     run(w, p, 15);
-    expect(events.some((e) => e.attack === 'volley')).toBe(true);
     expect(events.some((e) => e.attack === 'beam')).toBe(true);
+    expect(events.some((e) => e.attack === 'volley')).toBe(false);
     // Projectile attacks light up when their first projectile spawns; the prism relocation has none.
     expect(events.filter((e) => e.attack !== 'prism').every((e) => e.spawnedNow > 0)).toBe(true);
   });
-  it('phases: only volleys reach the box in wall phases, only rays in ray phases; all white; nothing spawns inside except refractions; no splits', () => {
+  it('phases: rays reach the box only in ray phases (the old windows), nothing in rest phases; all white; nothing spawns inside except refractions', () => {
     for (const level of [1, 10, 20]) {
       const w = new World(640, 369);
       const p = new Prism(w);
@@ -270,13 +186,13 @@ describe('Prism behaviour', () => {
         }
         w.step(still, STEP);
         w.soul.iframes = 1;
-        if (p.phase === 'wall' && w.props.length > 0) prismInWall++;
+        if (p.phase === 'rest' && w.props.length > 0) prismInWall++;
         for (const b of w.pool.all) {
           if (!b.active || entered.has(b) || b.flags & REFRACTED) continue;
           if (Math.abs(b.x) > w.box.halfWidth || Math.abs(b.y) > w.box.halfHeight) continue;
           entered.add(b);
-          const want = b.shape === 'triangle' ? 'wall' : 'ray';
-          counts[b.shape === 'triangle' ? 'volley' : 'ray']++;
+          const want = 'ray';
+          counts[b.shape === 'beam' ? 'ray' : 'volley']++;
           // Within a step either side of the detection (sim clock vs. detection rounding at window edges).
           if (![-2 * STEP, 0, STEP].some((d) => p.phaseAt(w.time + d).phase === want)) wrongPhase++;
         }
@@ -284,11 +200,11 @@ describe('Prism behaviour', () => {
       }
       // eslint-disable-next-line no-console
       console.log(`L${level}: ${phases.join(' ')} | entered: ${counts.volley} triangles, ${counts.ray} rays | spawned inside: ${insideSpawns} (refracted at prism: ${refractedInside}) | wrong phase: ${wrongPhase} | refractions ${log.beamRefracted.length}`);
-      expect(phases.slice(0, 5)).toEqual(['wall@0.0', 'breather@8.0', 'ray@9.0', 'breather@17.0', 'wall@18.0']);
+      expect(phases.slice(0, 5)).toEqual(['rest@0.0', 'breather@8.0', 'ray@9.0', 'breather@17.0', 'rest@18.0']);
       expect(wrongPhase).toBe(0);
       expect(insideSpawns).toBe(0);
       expect(prismInWall).toBe(0);
-      expect(counts.volley).toBeGreaterThan(0);
+      expect(counts.volley).toBe(0);
       expect(counts.ray).toBeGreaterThan(0);
     }
   });
@@ -315,14 +231,14 @@ describe('Prism behaviour', () => {
     const p = new Prism(w);
     p.setLevel(1);
     run(w, p, 4);
-    expect(w.props.length).toBe(0); // wall phase
+    expect(w.props.length).toBe(0); // rest phase
     run(w, p, 4.5); // 8.5 s: breather before the ray phase
     expect(w.props.length).toBe(1);
     w.soul.pos.x = p.prop!.x;
     w.soul.pos.y = p.prop!.y;
     w.step(still, STEP);
     expect(w.soul.hp).toBe(w.soul.maxHp);
-    run(w, p, 9); // 17.5 s: breather before the wall phase
+    run(w, p, 9); // 17.5 s: breather before the rest phase
     expect(w.props.length).toBe(0);
     p.setLevel(0);
     expect(w.props.length).toBe(0);

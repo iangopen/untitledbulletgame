@@ -1,5 +1,7 @@
 import type { World } from '../core/World';
 import type { CharacterHandle } from './Character';
+import { Rose } from './rose/Rose';
+import { roseConfig } from './rose/rose.config';
 import { Prism } from './prism/Prism';
 import { prismConfig } from './prism/prism.config';
 import { Mortimer } from './mortimer/Mortimer';
@@ -19,7 +21,7 @@ export interface CharacterEntry {
   color: number;
   maxLevel: number;
   /** Shape drawn for this character on the roster screen. */
-  shape: 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame';
+  shape: 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose';
   create: (world: World) => CharacterHandle;
   /** The character's data file (title, description, bands); the menus read from it. */
   config: CharacterConfig<string, unknown>;
@@ -27,6 +29,7 @@ export interface CharacterEntry {
 
 /** All characters by id. Adding a character = add its folder + one entry here. */
 export const registry: readonly CharacterEntry[] = [
+  { id: 'rose', name: 'Rose', color: theme.rose, maxLevel: roseConfig.maxLevel, shape: 'rose', create: (w) => new Rose(w, 6), config: roseConfig },
   { id: 'prism', name: 'Prism', color: theme.prism, maxLevel: prismConfig.maxLevel, shape: 'triangle', create: (w) => new Prism(w), config: prismConfig },
   { id: 'mortimer', name: 'Mortimer', color: theme.mortimer, maxLevel: mortimerConfig.maxLevel, shape: 'snowman', create: (w) => new Mortimer(w, 2), config: mortimerConfig },
   { id: 'ulysses', name: 'Ulysses', color: theme.ulysses, maxLevel: ulyssesConfig.maxLevel, shape: 'shield', create: (w) => new Ulysses(w, 3), config: ulyssesConfig },

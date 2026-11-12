@@ -3,7 +3,6 @@ import { nextPhaseArrival, phaseAt, type PhaseState } from '../phases';
 import type { ResolvedAttack } from '../config';
 import type { Wall } from '../../combat/Bullet';
 import { pointInTriangle, type Triangle } from '../../combat/Collision';
-import { line, lineOffset } from '../../combat/patterns';
 import { bulletExtent } from '../../combat/Bullet';
 import { maxOffscreenDistance, offscreenStart } from '../../combat/offscreen';
 import { propTriangle, type Prop } from '../../core/World';
@@ -26,21 +25,20 @@ export class Prism extends Character<PrismAttack, PrismRules> {
   readonly color = theme.prism;
   readonly config = prismConfig;
   protected readonly attacks = {
-    volley: (p: ResolvedAttack) => this.planVolley(p),
     beam: (p: ResolvedAttack) => this.planBeams(p),
     prism: (p: ResolvedAttack) => this.relocatePrism(p),
   };
 
-  /** Volleys and beams start off screen; plan them early enough to still arrive on the beat. */
+  /** Beams start off screen; plan them early enough to still arrive on the beat. */
   protected override planAhead(id: PrismAttack, p: ResolvedAttack): number {
     if (id === 'prism' || !p.speed) return 0;
-    const extent = id === 'volley' ? this.rules.volleySize : bulletExtent({ shape: 'beam', a: p.length!, b: this.rules.beamThickness });
+    const extent = bulletExtent({ shape: 'beam', a: p.length!, b: this.rules.beamThickness });
     return maxOffscreenDistance(this.world.box, extent) / p.speed;
   }
 
-  /** Volley triangles, rays (with their glow) and the refraction prism at this level. */
+  /** Rays (with their glow) and the refraction prism at this level. */
   override lookSpecs(): LookSpec[] {
-    const out: LookSpec[] = [{ shape: 'triangle', a: this.rules.volleySize }];
+    const out: LookSpec[] = [];
     const beam = this.resolved.attacks.beam;
     if (beam) out.push({ shape: 'beam', a: beam.length!, b: this.rules.beamThickness, glow: true });
     out.push({ prop: this.rules.prismRadius });
@@ -54,7 +52,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
   /** Phase as of the last step ('' until the first tick). */
   phase: PrismPhase | 'breather' | '' = '';
 
-  /** The phase at own-clock time `t`: wall/ray for phaseLength s, then a breather before the next. */
+  /** The phase at own-clock time `t`: rest/ray for phaseLength s, then a breather before the next. */
   phaseAt(t: number): PrismPhaseState {
     return phaseAt(this.rules, this.rules.phaseOrder, t);
   }
@@ -68,42 +66,10 @@ export class Prism extends Character<PrismAttack, PrismRules> {
   protected override cooldownOf(_id: PrismAttack, p: ResolvedAttack): number {
     return p.cooldown! / this.rules.phaseIntensity;
   }
-  private lastEdge: Wall | null = null;
-  private volleys = 0;
   private readonly tri: Triangle = { ax: 0, ay: 0, bx: 0, by: 0, cx: 0, cy: 0 };
 
   private get rules(): PrismRules {
     return this.config.rules;
-  }
-
-  private pickEdge(): Wall {
-    let e: Wall;
-    do e = EDGES[Math.floor(this.rng() * 4)]!;
-    while (e === this.lastEdge);
-    this.lastEdge = e;
-    return e;
-  }
-
-  // --- Levels 1+: triangle volleys from one edge, constant spacing, one safe gap --
-  private planVolley(p: ResolvedAttack): Shot[] {
-    // The opening volley is pre-fired (it appears part way in); from a side the row lands beside
-    // the box, clear of the HUD bands, where a top/bottom row would appear inside a band.
-    const edge = this.volleys++ === 0 ? (this.rng() < 0.5 ? 'left' : 'right') : this.pickEdge();
-    this.lastEdge = edge;
-    const gapAt = this.rng();
-    const style = {
-      shape: 'triangle' as const, a: this.rules.volleySize, faceVelocity: true, noPop: true,
-      damage: p.damage!, owner: this.id, kind: 'white' as const,
-    };
-    const { box, pool } = this.world;
-    // The row starts just off screen; it reaches the box edge after offset / speed seconds.
-    const lead = lineOffset(box, { edge, style }) / p.speed!;
-    return [{
-      lead,
-      fire: () => {
-        line(pool, this.world.box, { edge, spacing: this.rules.volleySpacing, speed: p.speed!, gapSize: p.gapSize!, gapAt, style });
-      },
-    }];
   }
 
   // --- Ray phase: beams from off screen; they only multiply through the prism --

@@ -17,9 +17,9 @@ const STILL: MoveInput = { dx: 0, dy: 0, slow: false };
 const attacksAt = (l: number) => Object.keys(resolveLevel(wardenConfig, l).attacks).sort();
 
 describe('The Warden config', () => {
-  it('validates, and is registered as slot 4 with the golem shape', () => {
+  it('validates, and is registered as slot 5 with the golem shape', () => {
     expect(validateConfig(wardenConfig)).toEqual([]);
-    expect(registry[3]).toMatchObject({ id: 'warden', shape: 'golem', maxLevel: 20 });
+    expect(registry[4]).toMatchObject({ id: 'warden', shape: 'golem', maxLevel: 20 });
   });
   it('punch 1-20; toss joins at 6; rip at 15', () => {
     for (const l of [1, 5]) expect(attacksAt(l)).toEqual(['punch']);

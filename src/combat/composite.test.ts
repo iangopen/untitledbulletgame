@@ -87,6 +87,36 @@ describe('composite shapes', () => {
 });
 
 describe('themed shapes changed this session: drawn == hitbox', () => {
+  it('Rose thorn and vine: drawn primitives == collision primitives at 3 rotations; tip, stem and thorn probes', async () => {
+    const { thornForm, vineForm, roseConfig } = await import('../characters/rose/rose.config');
+    const r = roseConfig.rules;
+    const thorn = thornForm(r.volleySize);
+    const vine = vineForm(r.vineLength, r.vineThickness, r.vineThorn, r.vineThornPitch);
+    for (const rot of [0, 0.4, 2.2]) {
+      const c = Math.cos(rot), s = Math.sin(rot);
+      const local = (lx: number, ly: number, rad = 0.2) => ({ x: c * lx - s * ly, y: s * lx + c * ly, r: rad });
+      for (const f of [thorn, vine]) {
+        const b = new BulletPool(1).spawn({ shape: 'composite', form: f, x: 0, y: 0, a: 0, damage: 1, rotation: rot })!;
+        const drawn: string[] = [];
+        const hit: string[] = [];
+        bulletPrimitives(b, (p) => void hit.push(JSON.stringify(p)));
+        bulletPrimitives(interpBullet(b, 1, new Bullet()), (p) => void drawn.push(JSON.stringify(p)));
+        expect(drawn).toEqual(hit);
+        expect(hit.length).toBe(f.parts.length);
+        if (f === thorn) {
+          expect(bulletHitsCircle(b, local(r.volleySize - 0.4, 0))).toBe(true); // just inside the tip
+          expect(bulletHitsCircle(b, local(r.volleySize + 0.4, 0))).toBe(false); // just past it
+          expect(bulletHitsCircle(b, local(0, r.volleySize * 0.7))).toBe(false); // beside the spike, no hook there
+        } else {
+          const h = r.vineThickness / 2;
+          expect(bulletHitsCircle(b, local(-300, h - 0.3))).toBe(true); // stem, inside its edge
+          expect(bulletHitsCircle(b, local(r.vineThickness * 1.8 - 0.4, 0))).toBe(true); // vine tip
+          expect(bulletHitsCircle(b, local(r.vineThickness * 1.8 + 0.4, 0))).toBe(false);
+          expect(bulletHitsCircle(b, local(-300, h + r.vineThorn + 0.5))).toBe(false); // beyond the longest thorn
+        }
+      }
+    }
+  });
   it('snowflake: six arms with branches; probes hit on the arms and miss between them', async () => {
     const { snowflakeForm } = await import('../characters/mortimer/mortimer.config');
     const R = 9;

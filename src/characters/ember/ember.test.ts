@@ -17,10 +17,10 @@ const STILL = { dx: 0, dy: 0, slow: false };
 const attacksAt = (l: number) => Object.keys(resolveLevel(emberConfig, l).attacks).sort();
 
 describe('Ember config', () => {
-  it('validates, and is registered as slot 5 with the flame shape', () => {
+  it('validates, and is registered as slot 6 with the flame shape', () => {
     expect(validateConfig(emberConfig)).toEqual([]);
-    expect(registry[4]).toMatchObject({ id: 'ember', shape: 'flame', maxLevel: 20 });
-    expect(registry.length).toBe(5);
+    expect(registry[5]).toMatchObject({ id: 'ember', shape: 'flame', maxLevel: 20 });
+    expect(registry.length).toBe(6);
   });
   it('embers 1-20; sweep joins at 6; wildfire at 15', () => {
     for (const l of [1, 5]) expect(attacksAt(l)).toEqual(['embers']);

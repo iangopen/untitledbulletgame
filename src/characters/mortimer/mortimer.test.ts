@@ -17,9 +17,9 @@ const STILL = { dx: 0, dy: 0, slow: false };
 const attacksAt = (l: number) => Object.keys(resolveLevel(mortimerConfig, l).attacks).sort();
 
 describe('Mortimer config', () => {
-  it('validates, and is registered as slot 2 with the snowman shape', () => {
+  it('validates, and is registered as slot 3 with the snowman shape', () => {
     expect(validateConfig(mortimerConfig)).toEqual([]);
-    expect(registry[1]).toMatchObject({ id: 'mortimer', shape: 'snowman', maxLevel: 20 });
+    expect(registry[2]).toMatchObject({ id: 'mortimer', shape: 'snowman', maxLevel: 20 });
   });
   it('snowfall 1-20; roll joins at 6; blizzard at 15', () => {
     for (const l of [1, 5]) expect(attacksAt(l)).toEqual(['snowfall']);

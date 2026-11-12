@@ -19,9 +19,9 @@ const STILL: MoveInput = { dx: 0, dy: 0, slow: false };
 const attacksAt = (l: number) => Object.keys(resolveLevel(ulyssesConfig, l).attacks).sort();
 
 describe('Ulysses config', () => {
-  it('validates; registered as slot 3 with the shield shape', () => {
+  it('validates; registered as slot 4 with the shield shape', () => {
     expect(validateConfig(ulyssesConfig)).toEqual([]);
-    expect(registry[2]).toMatchObject({ id: 'ulysses', shape: 'shield', maxLevel: 20 });
+    expect(registry[3]).toMatchObject({ id: 'ulysses', shape: 'shield', maxLevel: 20 });
   });
   it('summon 1-20; axe joins at 6; rain at 15', () => {
     for (const l of [1, 5]) expect(attacksAt(l)).toEqual(['summon']);

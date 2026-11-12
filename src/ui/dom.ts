@@ -21,7 +21,7 @@ export function at<T extends HTMLElement | SVGElement>(el: T, x: number, y: numb
   return el;
 }
 
-export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame';
+export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -90,6 +90,20 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
     node = document.createElementNS(SVG_NS, 'path');
     const k = r;
     node.setAttribute('d', `M ${0.12 * k} ${-k} C ${0.35 * k} ${-0.45 * k} ${0.78 * k} ${-0.1 * k} ${0.7 * k} ${0.35 * k} A ${0.7 * k} ${0.62 * k} 0 0 1 ${-0.7 * k} ${0.35 * k} C ${-0.72 * k} ${-0.05 * k} ${-0.3 * k} ${-0.4 * k} ${0.12 * k} ${-k} Z`);
+  } else if (kind === 'rose') {
+    // A rose: five round petals around a spiral heart, on a short stem with one leaf.
+    node = document.createElementNS(SVG_NS, 'g');
+    const k = r;
+    const add = (tag: string, attrs: Record<string, number | string>) => {
+      const el = document.createElementNS(SVG_NS, tag);
+      for (const [a, v] of Object.entries(attrs)) el.setAttribute(a, String(v));
+      node.appendChild(el);
+    };
+    add('path', { d: `M 0 ${0.15 * k} L ${-0.1 * k} ${k} M ${-0.06 * k} ${0.6 * k} Q ${-0.55 * k} ${0.45 * k} ${-0.6 * k} ${0.8 * k} Q ${-0.25 * k} ${0.85 * k} ${-0.06 * k} ${0.6 * k}`, 'stroke-width': 0.12 * k, 'stroke-linecap': 'round', 'data-stem': 1 });
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+      add('circle', { cx: Math.cos(a) * 0.3 * k, cy: -0.25 * k + Math.sin(a) * 0.3 * k, r: 0.3 * k });
+    }
   } else if (kind === 'circle') {
     node = document.createElementNS(SVG_NS, 'circle');
     node.setAttribute('r', String(r));
@@ -102,6 +116,10 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
     }).join(' ');
     node = document.createElementNS(SVG_NS, 'polygon');
     node.setAttribute('points', pts);
+  }
+  if (kind === 'rose' && !outline) {
+    // The stem is drawn as a line in the same color.
+    for (const c of Array.from(node.children)) if (c.hasAttribute('data-stem')) c.setAttribute('stroke', toCss(color));
   }
   if (outline) {
     node.setAttribute('fill', 'none');

@@ -48,6 +48,8 @@ export const theme = {
   blink: 0xe6f2ff,
   /** Character accent colors (one per character; never red). */
   prism: 0x3de8ff,
+  /** Rose: deep rose pink, roster and profile only (RGB distance > 100 from the soul's red and KR magenta). */
+  rose: 0xc8608c,
   /** Prism's refraction prism (a prop): light violet, kept distinct from blue projectiles (#2aa0ff). */
   prismProp: 0xb49cff,
   /** Mortimer: pale ice, darker and cooler than white projectiles and far lighter than blue ones. */
