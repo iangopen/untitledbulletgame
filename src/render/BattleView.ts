@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { World } from '../core/World';
 import type { Vec2, Wall } from '../core/Box';
 import { Bullet, bulletExtent, rectCorners, sinceArmed } from '../combat/Bullet';
-import { bulletPrimitives, type Primitive } from '../combat/composite';
+import { bulletPrimitives, RING_TONGUES, ringTongue, type Primitive } from '../combat/composite';
 import type { Circle } from '../combat/Collision';
 import { hud, line, rgb, theme, VIEW } from './theme';
 import { renderScale } from './display';
@@ -126,6 +126,8 @@ export class BattleView {
   private readonly tmp: Vec2 = { x: 0, y: 0 };
   private readonly tmp2: Vec2 = { x: 0, y: 0 };
   private readonly tmp3: Vec2 = { x: 0, y: 0 };
+  /** Template for ring flame-tongue looks (a composite bullet whose form is set per tongue). */
+  private readonly tongueTpl = new Bullet().init({ shape: 'composite', a: 0, x: 0, y: 0, damage: 0 });
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -222,13 +224,13 @@ export class BattleView {
     const rot = box.rotation + b.rotation;
     const s = b.scale;
     // Fade into existence at full size (visual only; the hitbox is full size from the first step).
-    alpha *= b.fadeAlpha;
+    alpha *= b.fadeAlpha * b.flickerAlpha;
     if (b.decor) {
       // An object, not a projectile (The Warden's fists): earthy fill plus a lighter rocky edge.
       const fill = this.looks.bullet(b);
       const fi = this.propSprites.next(fill).setPosition(p.x, p.y).setRotation(rot).setScale(s / fill.k).setTint(b.tint);
       const edge = this.looks.edge(b);
-      const ei = this.propSprites.next(edge).setPosition(p.x, p.y).setRotation(rot).setScale(s / edge.k).setTint(theme.wardenFistEdge);
+      const ei = this.propSprites.next(edge).setPosition(p.x, p.y).setRotation(rot).setScale(s / edge.k).setTint(b.edgeTint >= 0 ? b.edgeTint : theme.wardenFistEdge);
       if (alpha < 1) {
         fi.setAlpha(alpha);
         ei.setAlpha(alpha);
@@ -249,6 +251,16 @@ export class BattleView {
         const img = core.next(look).setPosition(c.x, c.y).setRotation(box.rotation + (q.r.rotation ?? 0)).setScale((2 * q.r.hw) / look.size, 1 / look.k).setTint(color);
         if (alpha < 1) img.setAlpha(alpha);
       });
+      // Flame tongues: the same triangles collision uses (ringTongue), as cached tongue looks.
+      const tpl = this.tongueTpl;
+      for (let i = 0; i < RING_TONGUES; i++) {
+        const tg = ringTongue(b, i);
+        tpl.form = tg.form;
+        const tl = this.looks.bullet(tpl);
+        const c = box.toWorld(tg, this.tmp3);
+        const img = core.next(tl).setPosition(c.x, c.y).setRotation(box.rotation + tg.rot).setScale(1 / tl.k).setTint(color);
+        if (alpha < 1) img.setAlpha(alpha);
+      }
       return;
     }
     const look = this.looks.bullet(b);

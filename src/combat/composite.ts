@@ -29,6 +29,33 @@ export function makeForm(parts: readonly Part[]): CompositeForm {
   return { parts, extent: e };
 }
 
+/** Flame tongues around a ring (see bulletPrimitives 'ring'). */
+export const RING_TONGUES = 32;
+const tongues = new Map<string, CompositeForm>();
+/** One flame tongue for a ring `b` thick: a triangle based on the ring's outer edge, pointing out (+x). */
+export function ringTongueForm(b: number, long: boolean): CompositeForm {
+  const key = `${b.toFixed(3)}:${long ? 1 : 0}`;
+  let f = tongues.get(key);
+  if (!f) {
+    const w = b * 1.25, h = b * (long ? 2.0 : 1.1);
+    // Base sunk 0.5 px into the ring so it joins it.
+    f = makeForm([{ kind: 'tri', ax: 0, ay: -w / 2, bx: 0, by: w / 2, cx: h + 0.5, cy: 0 }]);
+    tongues.set(key, f);
+  }
+  return f;
+}
+const tg = { x: 0, y: 0, rot: 0, form: null as unknown as CompositeForm };
+/** Tongue `i` of a ring bullet: its base point (box-local), angle and form (shared with drawing). */
+export function ringTongue(b: Pick<Bullet, 'x' | 'y' | 'a' | 'b' | 'rotation'>, i: number, out = tg): typeof tg {
+  const t = b.rotation + (2 * Math.PI * (i + 0.5)) / RING_TONGUES;
+  const r0 = b.a * Math.cos(Math.PI / RING_SEGMENTS) + b.b / 2 - 0.5;
+  out.x = b.x + Math.cos(t) * r0;
+  out.y = b.y + Math.sin(t) * r0;
+  out.rot = t;
+  out.form = ringTongueForm(b.b, i % 2 === 0);
+  return out;
+}
+
 export type Primitive = { kind: 'circle'; c: Circle } | { kind: 'rect'; r: Rect } | { kind: 'tri'; t: Triangle };
 
 // Scratch primitives: callers must use each one inside the callback (no allocation per call).
@@ -69,6 +96,17 @@ export function bulletPrimitives(b: Bullet, fn: (p: Primitive) => boolean | void
         sr.y = b.y + Math.sin(t) * mid;
         sr.rotation = t + Math.PI / 2;
         if (fn(pr) === true) return true;
+      }
+      // Flame tongues licking outward from the outer edge (RING_TONGUES, alternating long/short).
+      for (let i = 0; i < RING_TONGUES; i++) {
+        ringTongue(b, i, tg);
+        const f = tg.form;
+        const c = Math.cos(tg.rot), s = Math.sin(tg.rot);
+        const p = f.parts[0]! as { ax: number; ay: number; bx: number; by: number; cx: number; cy: number };
+        st.ax = tg.x + p.ax * c - p.ay * s; st.ay = tg.y + p.ax * s + p.ay * c;
+        st.bx = tg.x + p.bx * c - p.by * s; st.by = tg.y + p.bx * s + p.by * c;
+        st.cx = tg.x + p.cx * c - p.cy * s; st.cy = tg.y + p.cx * s + p.cy * c;
+        if (fn(pt) === true) return true;
       }
       return false;
     }

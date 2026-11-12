@@ -6,7 +6,7 @@ import { World } from '../../core/World';
 import { STEP } from '../../core/Clock';
 import { Bullet as B, type Bullet } from '../../combat/Bullet';
 import { bulletHitsCircle } from '../../combat/hitTest';
-import { bulletPrimitives } from '../../combat/composite';
+import { bulletPrimitives, ringTongue } from '../../combat/composite';
 import { interpBullet } from '../../render/interp';
 import { aabbInBand, bulletWorldAabb } from '../../combat/bands';
 import { SCREEN_HEIGHT, SCREEN_WIDTH } from '../../tuning';
@@ -66,7 +66,7 @@ describe('Ember config', () => {
   });
 });
 
-const kindOf = (b: Bullet) => (b.shape === 'circle' ? 'embers' : b.shape === 'ring' ? 'wildfire' : 'sweep');
+const kindOf = (b: Bullet) => (b.decor ? 'icon' : b.shape === 'ring' ? 'wildfire' : b.form?.parts.length === 4 ? 'embers' : 'sweep');
 
 /** Run Ember alone for `seconds`, tracking spawns and arrivals. */
 function runEmber(level: number, seconds: number, mover: boolean) {
@@ -81,6 +81,7 @@ function runEmber(level: number, seconds: number, mover: boolean) {
   const entered = new Set<Bullet>();
   const counts: Record<string, number> = {};
   const spawned: Record<string, number> = {};
+  let icons = 0, iconBad = 0;
   let onScreenSpawns = 0, notOrange = 0, wrongPhase = 0, ringBad = 0, inBand = 0;
   let dir = 1, lost = 0;
   for (let i = 0; i < Math.round(seconds / STEP); i++) {
@@ -89,6 +90,12 @@ function runEmber(level: number, seconds: number, mover: boolean) {
       if (!b.active || seen.has(b)) continue;
       seen.add(b);
       const k = kindOf(b);
+      if (k === 'icon') {
+        // The warning icon: harmless decor at the ring's center, outside the box, never in a band.
+        icons++;
+        if ((Math.abs(b.x) <= w.box.halfWidth && Math.abs(b.y) <= w.box.halfHeight) || aabbInBand(bulletWorldAabb(w.box, b))) iconBad++;
+        continue;
+      }
       spawned[k] = (spawned[k] ?? 0) + 1;
       if (b.kind !== 'orange') notOrange++;
       if (aabbInBand(bulletWorldAabb(w.box, b))) inBand++;
@@ -104,7 +111,7 @@ function runEmber(level: number, seconds: number, mover: boolean) {
     w.step(mover ? { dx: dir, dy: 0, slow: false } : STILL, STEP);
     lost += Math.max(0, hp0 - w.soul.hp);
     for (const b of w.pool.all) {
-      if (!b.active || entered.has(b)) continue;
+      if (!b.active || entered.has(b) || b.decor) continue;
       const k = kindOf(b);
       const arrived = k === 'wildfire' ? b.a + b.b / 2 >= emberConfig.rules.ringGap : k === 'embers' ? b.y < w.box.halfHeight : Math.abs(b.x) <= w.box.halfWidth + 1;
       if (!arrived) continue;
@@ -116,7 +123,7 @@ function runEmber(level: number, seconds: number, mover: boolean) {
     for (const b of [...seen]) if (!b.active) { seen.delete(b); entered.delete(b); }
     if (!w.soul.alive) w.soul.hp = w.soul.maxHp;
   }
-  return { w, e, phases, counts, spawned, onScreenSpawns, notOrange, wrongPhase, ringBad, inBand, started, lost };
+  return { w, e, phases, counts, spawned, onScreenSpawns, notOrange, wrongPhase, ringBad, inBand, started, lost, icons, iconBad };
 }
 
 describe('Ember behaviour', () => {
@@ -129,12 +136,14 @@ describe('Ember behaviour', () => {
     for (const level of [1, 10, 20]) {
       const r = runEmber(level, 40, true);
       // eslint-disable-next-line no-console
-      console.log(`Ember L${level} 40 s: ${r.phases.join(' ')} | spawned ${JSON.stringify(r.spawned)} | arrived ${JSON.stringify(r.counts)} | non-orange ${r.notOrange}, off-screen-rule breaks ${r.onScreenSpawns}, rings inside the box ${r.ringBad}, spawns in a band ${r.inBand}, wrong phase ${r.wrongPhase} | mover HP lost ${r.lost}`);
+      console.log(`Ember L${level} 40 s: ${r.phases.join(' ')} | spawned ${JSON.stringify(r.spawned)} | arrived ${JSON.stringify(r.counts)} | non-orange ${r.notOrange}, off-screen-rule breaks ${r.onScreenSpawns}, rings inside the box ${r.ringBad}, spawns in a band ${r.inBand}, warning icons ${r.icons} (in a band or inside the box ${r.iconBad}), wrong phase ${r.wrongPhase} | mover HP lost ${r.lost}`);
       expect(r.phases.slice(0, expected[level]!.length)).toEqual(expected[level]);
       expect(r.notOrange).toBe(0);
       expect(r.onScreenSpawns).toBe(0);
       expect(r.ringBad).toBe(0);
       expect(r.inBand).toBe(0);
+      expect(r.iconBad).toBe(0);
+      expect(r.icons).toBe(r.spawned.wildfire ?? 0);
       expect(r.wrongPhase).toBe(0);
       expect(r.lost).toBe(0);
       expect(r.counts.embers).toBeGreaterThan(0);
@@ -168,11 +177,18 @@ describe('Ember behaviour', () => {
       bulletPrimitives(interpBullet(b, 1, drawn), (q) => void (q.kind === 'rect' && d.push(q.r.x, q.r.y, q.r.hw, q.r.hh, q.r.rotation ?? 0)));
       expect(d).toEqual(a);
       // Probes along a chord's middle (angle of segment 3): just inside / outside both edges.
+      // Between two flame tongues (they sit at (i + 0.5) * 11.25 deg): a chord's middle at 22.5 deg.
       const t = (2 * Math.PI * 3) / 48;
       const mid = b.a * Math.cos(Math.PI / 48);
       const at = (rr: number) => ({ x: b.x + Math.cos(t) * rr, y: b.y + Math.sin(t) * rr, r: 1 });
       expect(bulletHitsCircle(b, at(mid + b.b / 2 + 0.9))).toBe(true);
-      expect(bulletHitsCircle(b, at(mid + b.b / 2 + 1.1))).toBe(false);
+      if (b.a > 100) expect(bulletHitsCircle(b, at(mid + b.b / 2 + 1.1))).toBe(false);
+      // A tongue's tip (long tongue 0, at 5.6 deg) hits; past it misses.
+      const tg = ringTongue(b, 0);
+      const tip = tg.form.parts[0] as { cx: number };
+      const tx = tg.x + Math.cos(tg.rot) * tip.cx, ty = tg.y + Math.sin(tg.rot) * tip.cx;
+      expect(bulletHitsCircle(b, { x: tx + Math.cos(tg.rot) * 0.9, y: ty + Math.sin(tg.rot) * 0.9, r: 1 })).toBe(true);
+      expect(bulletHitsCircle(b, { x: tx + Math.cos(tg.rot) * 1.6, y: ty + Math.sin(tg.rot) * 1.6, r: 1 })).toBe(false);
       if (mid - b.b / 2 - 1.1 > 0) {
         expect(bulletHitsCircle(b, at(mid - b.b / 2 - 0.9))).toBe(true);
         expect(bulletHitsCircle(b, at(mid - b.b / 2 - 1.1))).toBe(false);
@@ -200,7 +216,11 @@ describe('Ember behaviour', () => {
       const live = w.pool.all.filter((b) => b.active);
       expect(live.length).toBeGreaterThan(0);
       for (const b of live) {
-        expect(b.kind).toBe('orange');
+        if (atk === 'wildfire') {
+          // The warning icon comes first: harmless decor outside the box; the ring follows it.
+          expect(b.decor).toBe(true);
+          expect(b.damage).toBe(0);
+        } else expect(b.kind).toBe('orange');
         const p = w.box.toWorld(b);
         if (atk === 'wildfire') expect(Math.abs(b.x) > w.box.halfWidth || Math.abs(b.y) > w.box.halfHeight).toBe(true);
         else expect(p.x < 0 || p.x > SCREEN_WIDTH || p.y < 0 || p.y > SCREEN_HEIGHT).toBe(true);

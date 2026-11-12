@@ -84,6 +84,12 @@ export interface BulletSpec {
   decor?: boolean;
   /** Fill color for decor objects (projectiles always use their type color). */
   tint?: number;
+  /** Edge color for decor objects (default: The Warden's rocky edge). */
+  edgeTint?: number;
+  /** Visual-only flicker: drawn alpha dips by up to this fraction (fire). Never touches the hitbox. */
+  flicker?: number;
+  /** Visual-only blink rate (Hz): drawn on/off (warning icons). Never touches the hitbox. */
+  blink?: number;
 }
 
 export class Bullet {
@@ -118,6 +124,9 @@ export class Bullet {
   glow = false;
   decor = false;
   tint = 0;
+  edgeTint = -1;
+  flicker = 0;
+  blink = 0;
   /** Pre-step position and rotation, for render interpolation only. Spawns start equal to the current state. */
   px = 0;
   py = 0;
@@ -153,6 +162,9 @@ export class Bullet {
     this.glow = s.glow ?? false;
     this.decor = s.decor ?? false;
     this.tint = s.tint ?? 0;
+    this.edgeTint = s.edgeTint ?? -1;
+    this.flicker = s.flicker ?? 0;
+    this.blink = s.blink ?? 0;
     this.snapshot();
     return this;
   }
@@ -178,6 +190,17 @@ export class Bullet {
    * e.g. off-screen spawns); a `growIn` pre-active bullet fades in over its gold time (at most
    * GOLD_FADE_TIME). The hitbox is always full size; a pre-active bullet never collides anyway.
    */
+  get flickerAlpha(): number {
+    let k = 1;
+    if (this.flicker > 0) {
+      // Two incommensurate waves, phased per bullet (flags), so neighbours flicker apart.
+      const ph = (this.flags % 997) * 0.37;
+      k *= 1 - this.flicker * 0.5 * (1 + 0.6 * Math.sin(17 * this.age + ph) + 0.4 * Math.sin(29 * this.age + 2 * ph));
+    }
+    if (this.blink > 0 && Math.floor(this.age * this.blink * 2) % 2 === 1) k *= 0.2;
+    return Math.max(0, Math.min(1, k));
+  }
+
   get fadeAlpha(): number {
     if (this.growIn && this.armAt > 0) return Math.min(1, this.age / Math.min(this.armAt, GOLD_FADE_TIME));
     if (this.noPop) return 1;
@@ -234,7 +257,7 @@ export function bulletExtent(spec: Pick<BulletSpec, 'shape' | 'a' | 'b'> & { for
   const b = spec.b ?? spec.a;
   if (spec.shape === 'beam') return Math.hypot(spec.a / 2, b / 2);
   if (spec.shape === 'rect') return Math.hypot(spec.a, b);
-  if (spec.shape === 'ring') return spec.a + b / 2;
+  if (spec.shape === 'ring') return spec.a + b / 2 + b * 2.0 + 0.5; // + the long flame tongues
   return spec.a;
 }
 

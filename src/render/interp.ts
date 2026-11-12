@@ -57,6 +57,10 @@ export function interpBullet(b: Bullet, t: number, out: Bullet): Bullet {
   out.glow = b.glow;
   out.decor = b.decor;
   out.tint = b.tint;
+  out.edgeTint = b.edgeTint;
+  out.flicker = b.flicker;
+  out.blink = b.blink;
+  out.flags = b.flags;
   lerpPoint(b.px, b.py, b.x, b.y, t, out);
   out.rotation = lerpAngle(b.prot, b.rotation, t);
   return out;

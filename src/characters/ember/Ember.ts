@@ -6,7 +6,11 @@ import { line, lineOffset, lineSlots, type BulletStyle } from '../../combat/patt
 import { maxOffscreenDistance } from '../../combat/offscreen';
 import { BOX_HEIGHT } from '../../tuning';
 import { theme } from '../../render/theme';
-import { emberConfig, flameWallForm, type EmberAttack, type EmberRules } from './ember.config';
+import { emberConfig, emberFlameForm, fireIconForm, flameWallForm, type EmberAttack, type EmberRules } from './ember.config';
+import { aabbInBand, bulletWorldAabb } from '../../combat/bands';
+import { SCREEN_HEIGHT, SCREEN_WIDTH } from '../../tuning';
+import type { CompositeForm } from '../../combat/composite';
+import { ringTongueForm } from '../../combat/composite';
 
 export type EmberPhaseState = PhaseState<EmberAttack>;
 
@@ -56,7 +60,7 @@ export class Ember extends Character<EmberAttack, EmberRules> {
   }
 
   protected override planAhead(id: EmberAttack, p: ResolvedAttack): number {
-    if (id === 'wildfire') return this.ringLead(p);
+    if (id === 'wildfire') return this.rules.ringWarn + this.ringLead(p);
     return maxOffscreenDistance(this.world.box, bulletExtent(this.style(id, p))) / p.speed!;
   }
 
@@ -72,9 +76,11 @@ export class Ember extends Character<EmberAttack, EmberRules> {
   /** Bullet style per attack. Every projectile is orange. */
   private style(id: EmberAttack, p: ResolvedAttack): BulletStyle {
     const base = { damage: p.damage!, owner: this.id, kind: 'orange' as const, noPop: true };
-    if (id === 'embers') return { ...base, shape: 'circle', a: p.size!, onStep: this.sparkHook(p.drift!, p.size!) };
-    if (id === 'sweep') return { ...base, shape: 'composite', form: this.wallForm(p), a: 0, faceVelocity: true };
-    return { ...base, shape: 'ring', a: p.thickness!, b: p.thickness! };
+    const flicker = this.rules.fireFlicker;
+    // Small flames pointing where they fly (mostly up).
+    if (id === 'embers') return { ...base, shape: 'composite', form: emberFlameForm(p.size!), a: 0, faceVelocity: true, flicker, onStep: this.sparkHook(p.drift!) };
+    if (id === 'sweep') return { ...base, shape: 'composite', form: this.wallForm(p), a: 0, faceVelocity: true, flicker };
+    return { ...base, shape: 'ring', a: p.thickness!, b: p.thickness!, flicker };
   }
 
   /** The flame wall covers `cover` of the default box height (a fixed size, so it is one cached look). */
@@ -82,20 +88,23 @@ export class Ember extends Character<EmberAttack, EmberRules> {
     return flameWallForm(BOX_HEIGHT * p.cover!, this.rules.sweepThickness);
   }
 
-  /** Every look at this level: spark radii through the flicker, the flame wall, the ring segment. */
+  /** Every look at this level: the flame, the fire wall, the ring chord and its two tongues, the warning icon. */
   override lookSpecs(): LookSpec[] {
     const out: LookSpec[] = [];
     const at = this.resolved.attacks;
-    if (at.embers) {
-      const s = at.embers.size!;
-      const radii: number[] = [];
-      for (let r = s * (1 - this.rules.flicker) * 0.98; r <= s * 1.16; r *= 1.05) radii.push(r);
-      out.push({ shape: 'circle', radii });
-    }
+    if (at.embers) out.push({ shape: 'composite', form: emberFlameForm(at.embers.size!) });
     if (at.sweep) out.push({ shape: 'composite', form: this.wallForm(at.sweep) });
-    if (at.wildfire) out.push({ shape: 'ring', a: at.wildfire.thickness!, b: at.wildfire.thickness! });
+    if (at.wildfire) {
+      const t = at.wildfire.thickness!;
+      out.push({ shape: 'ring', a: t, b: t });
+      out.push({ shape: 'composite', form: ringTongueForm(t, true) }, { shape: 'composite', form: ringTongueForm(t, false) });
+      out.push({ shape: 'composite', form: this.iconForm, decor: true });
+    }
     return out;
   }
+
+  /** The wildfire warning icon's form (one per Ember, so one cached look). */
+  private readonly iconForm: CompositeForm = fireIconForm(this.config.rules.ringWarnSize);
 
   /** `count` filled slots out of `slots`, at random; the rest are gaps. */
   private gapsFor(slots: number, count: number): number[] {
@@ -117,13 +126,13 @@ export class Ember extends Character<EmberAttack, EmberRules> {
   }
 
   /**
-   * Drift x(t) = amp * sin(freq * t + phase) and a flicker: the radius pulses down by up to
-   * `flicker` of its size. Drawing and collision both read `a`, so the hitbox flickers with it. On
+   * Drift x(t) = amp * sin(freq * t + phase); the flame turns to face where it flies. The flicker
+   * is drawn alpha only (Bullet.flicker), never the hitbox. On
    * its first step each spark picks a phase and a speed up to sparkSpeedSpread faster, moving back
    * by the same factor so it still reaches the box on the beat (and stays off screen).
    */
-  private sparkHook(amp: number, size: number): StepHook {
-    const { driftFreq: w, flicker, flickerFreq: ff, sparkSpeedSpread: spread } = this.rules;
+  private sparkHook(amp: number): StepHook {
+    const { driftFreq: w, sparkSpeedSpread: spread } = this.rules;
     return (b: Bullet) => {
       if (b.flags === 0) {
         b.flags = 1 + Math.floor(this.rng() * 1e6);
@@ -134,7 +143,6 @@ export class Ember extends Character<EmberAttack, EmberRules> {
         b.snapshot();
       }
       b.vx = amp * w * Math.cos(w * b.age + b.flags);
-      b.a = size * (1 - flicker * 0.5 * (1 + Math.sin(ff * b.age + b.flags * 0.37)));
     };
   }
 
@@ -158,13 +166,14 @@ export class Ember extends Character<EmberAttack, EmberRules> {
 
   // --- Wildfire: rings form just outside a wall and grow inward across the box ------
   private planWildfire(p: ResolvedAttack): Shot[] {
-    const lead = this.ringLead(p);
+    // The warning icon blinks ringWarn s first, then the ring goes off.
+    const lead = this.rules.ringWarn + this.ringLead(p);
     const shots: Shot[] = [];
     const first = this.nextRingWall();
     const opposite: Record<Wall, Wall> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
     for (let k = 0; k < p.count!; k++) {
       const wall = k % 2 === 0 ? first : opposite[first];
-      shots.push({ lead: lead - k * this.rules.ringStagger, fire: () => this.ring(p, wall) });
+      shots.push({ lead: lead - k * this.rules.ringStagger, fire: () => void this.warnRing(p, wall) });
     }
     return shots;
   }
@@ -182,15 +191,53 @@ export class Ember extends Character<EmberAttack, EmberRules> {
     return w;
   }
 
+  /** Where a ring on `wall` is centered (soul's box, box-local): ringGap outside the wall's middle. */
+  private ringCenter(wall: Wall): [number, number] {
+    const box = this.world.box;
+    const [nx, ny] = OUTWARD[wall];
+    const g = this.rules.ringGap;
+    return [nx * (box.halfWidth + g), ny * (box.halfHeight + g)];
+  }
+
+  /**
+   * The warning: a fire icon (decor: harmless, never collides) blinks at the ring's center for
+   * ringWarn s, upright on screen; then the ring goes off at the same (world-fixed) point. Skipped
+   * if the icon would sit in a HUD band or off screen (it never does with the default box).
+   */
+  warnRing(p: ResolvedAttack, wall: Wall): Bullet | null {
+    const [cx, cy] = this.ringCenter(wall);
+    const r = this.rules;
+    let fired = false;
+    const icon = this.world.pool.spawn({
+      shape: 'composite', form: this.iconForm, a: 0, x: cx, y: cy, rotation: -this.world.box.rotation, damage: 0, owner: this.id,
+      decor: true, tint: theme.ember, edgeTint: theme.bullet.orange, blink: r.ringWarnBlink, noPop: true, lifetime: r.ringWarn + 0.05,
+      onStep: (b: Bullet) => {
+        if (fired || b.age < r.ringWarn - 1e-9) return;
+        fired = true;
+        this.ringAt(p, b.x, b.y);
+      },
+    });
+    if (!icon) return null;
+    const a = bulletWorldAabb(this.world.box, icon);
+    if (aabbInBand(a) || a.x0 < 0 || a.x1 > SCREEN_WIDTH || a.y0 < 0 || a.y1 > SCREEN_HEIGHT) {
+      this.world.pool.release(icon, 'cancel');
+      return null;
+    }
+    return icon;
+  }
+
   /**
    * One ring centered `ringGap` outside the middle of `wall` of the soul's box (as it is now),
    * starting as a disc (inner edge at the center) and growing at `speed` until it has passed the far corners.
    */
   ring(p: ResolvedAttack, wall: Wall): Bullet | null {
+    const [cx, cy] = this.ringCenter(wall);
+    return this.ringAt(p, cx, cy);
+  }
+
+  /** A ring at box-local (cx, cy) (the soul's box), growing until past the box's far corners. */
+  private ringAt(p: ResolvedAttack, cx: number, cy: number): Bullet | null {
     const box = this.world.box;
-    const [nx, ny] = OUTWARD[wall];
-    const g = this.rules.ringGap;
-    const cx = nx * (box.halfWidth + g), cy = ny * (box.halfHeight + g);
     // Far corners: across the box from the ring's center.
     const far = Math.hypot(Math.abs(cx) + box.halfWidth, Math.abs(cy) + box.halfHeight);
     const t = p.thickness!;
