@@ -47,3 +47,7 @@ Added The Warden (slot 4): punch (decor fists shove the box with Box.moveTo, a r
 
 ## 2026-11-11 - Multi-box World and The Warden's rip
 world.boxes + world.box (the soul's box), split/merge/reset with reframing, per-box wall hooks, boxSplit/boxMerged. The Warden rips the box (L15+), merges it offset with a punch and re-centers it. Fixed: punch returns used a merged box's off-center defaults; DebugScene merge needed the inactive tick to check for the merge.
+
+## 2026-11-11 - Ember, toss-and-spin, Box.scaleTo
+Ember (slot 5, orange support: embers, fire sweep, wildfire rings) completes the five launch characters. The Warden's swing became a toss: Box.scaleTo shrinks the box (soul scales with it), it spins whole turns while small and lands with a shake (boxLanded). New 'ring' bullet shape drawn as stretched line chords. No new combos (Ian designs them).
+Found: the soul disc texture was keyed by radius (45 mid-battle builds once the soul scaled); sweep and gust off-screen offsets were planned before a toss and started in a HUD band. Fast-forwarding the sim in one real frame leaves despawn ghosts on screen; clear view.ghosts before screenshots.
