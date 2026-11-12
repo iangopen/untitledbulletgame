@@ -32,6 +32,15 @@ export interface GameEvents {
   wallStateChanged: { wall: Wall; damaging: boolean; damage: number; type: DamageType };
   /** A damaging wall touched the soul and the damage applied (not blocked by i-frames). */
   wallHit: { wall: Wall; damage: number; type: DamageType };
+  /** One World step finished moving bullets (before hits). Combo rules use it for per-step checks. */
+  stepped: { dt: number };
+  /**
+   * A combo rule (director/interactions.ts) fired: where, how many projectiles it affected or made,
+   * and for a timing combo the world time it set (`at`).
+   */
+  comboTriggered: { id: string; x: number; y: number; count: number; at?: number };
+  /** Ulysses' phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */
+  ulyssesPhaseChanged: { owner: string; phase: 'summon' | 'swipe' | 'rain' | 'breather'; next: 'summon' | 'swipe' | 'rain' };
   /** The equipped active ability was used (Shift). */
   abilityUsed: { id: string };
   /** Shift was pressed while the active ability was still recharging (nothing happened). */

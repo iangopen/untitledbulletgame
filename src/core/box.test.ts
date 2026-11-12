@@ -146,7 +146,7 @@ describe('Soul and contents in a moving box', () => {
     }
   });
   it('a squeeze does not drag things the wall has not reached (world-fixed contents)', () => {
-    const w = new World(0, 0);
+    const w = new World(640, 360);
     w.soul.pos.x = 100; // near the right wall, far from the moving left wall
     const before = w.box.toWorld(w.soul.pos);
     const bullet = w.pool.spawn({ shape: 'circle', x: 50, y: -80, a: 3, damage: 1, noPop: true })!;

@@ -50,6 +50,9 @@ export function interpBullet(b: Bullet, t: number, out: Bullet): Bullet {
   out.age = b.age;
   out.noPop = b.noPop;
   out.kind = b.kind;
+  out.armed = b.armed;
+  out.armAt = b.armAt;
+  out.growIn = b.growIn;
   lerpPoint(b.px, b.py, b.x, b.y, t, out);
   out.rotation = lerpAngle(b.prot, b.rotation, t);
   return out;

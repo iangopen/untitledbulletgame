@@ -24,10 +24,19 @@ export const theme = {
     orange: 0xff8a1c,
     kr: 0xff2bd6,
   },
+  /**
+   * Pre-active projectiles (drawn, never collide; see Bullet.armDelay): pale gold, the "harmless,
+   * about to shine" warning. Distinct from orange (#ff8a1c) by hue and lightness.
+   */
+  preActive: 0xe9cf6a,
+  /** The shine at the gold -> active moment. */
+  shine: 0xffffff,
   /** Character accent colors (one per character; never red). */
   prism: 0x3de8ff,
   /** Mortimer: pale ice, darker and cooler than white projectiles and far lighter than blue ones. */
   mortimer: 0xb4d4e0,
+  /** Ulysses: royal gold (roster and profile box only; projectiles use their type colors). */
+  ulysses: 0xf2c230,
   /** Non-damaging props (e.g. refraction prism) draw as translucent fill + outline. */
   propFillAlpha: 0.18,
   /**

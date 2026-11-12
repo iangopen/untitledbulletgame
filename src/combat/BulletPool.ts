@@ -1,6 +1,7 @@
 import type { Box } from '../core/Box';
-import { BULLET_CAPACITY, DESPAWN_MARGIN, FAR_CULL_DISTANCE } from '../tuning';
-import { Bullet, type BulletContext, type BulletSpec, type Wall } from './Bullet';
+import { BULLET_CAPACITY, FAR_CULL_DISTANCE, SCREEN_HEIGHT, SCREEN_WIDTH } from '../tuning';
+import type { Vec2 } from '../core/Box';
+import { Bullet, bulletExtent, type BulletContext, type BulletSpec, type Wall } from './Bullet';
 
 export type DespawnReason = 'lifetime' | 'offbox' | 'wall' | 'cleared';
 
@@ -51,11 +52,21 @@ export class BulletPool implements BulletContext {
     return b ? b.init(spec) : null;
   }
 
+  private readonly wp: Vec2 = { x: 0, y: 0 };
+
+  /** Whether the bullet's whole current shape (center + extent, any rotation) is outside the screen. */
+  offScreen(b: Bullet, box: Box): boolean {
+    const p = box.toWorld(b, this.wp);
+    const e = bulletExtent(b) * b.scale;
+    return p.x + e < 0 || p.x - e > SCREEN_WIDTH || p.y + e < 0 || p.y - e > SCREEN_HEIGHT;
+  }
+
   release(b: Bullet, reason: DespawnReason = 'cleared'): void {
     if (!b.active) return;
     b.active = false;
     b.onStep = undefined;
     b.onWall = undefined;
+    b.onArm = undefined;
     this.free.push(this.index.get(b)!);
     this.onDespawn?.(b, reason);
   }
@@ -80,6 +91,12 @@ export class BulletPool implements BulletContext {
       }
       b.onStep?.(b, dt, this);
       if (!b.active) continue; // hook may release
+      // Pre-active -> active: from this step on it collides (and its onArm hook runs once).
+      if (!b.armed && b.age >= b.armAt - 1e-9) {
+        b.armed = true;
+        b.onArm?.(b, this);
+        if (!b.active) continue;
+      }
       const wasInside = Math.abs(b.x) <= hw && Math.abs(b.y) <= hh;
       b.x += b.vx * dt;
       b.y += b.vy * dt;
@@ -107,11 +124,13 @@ export class BulletPool implements BulletContext {
           continue;
         }
       }
-      // Off-box cull only once a bullet is outside the margin AND not heading toward the box, so
-      // attacks spawned off screen travel in untouched. Entering the box never fires wall hooks
-      // (only inside -> outside above does).
-      const outside = Math.abs(b.x) > hw + DESPAWN_MARGIN || Math.abs(b.y) > hh + DESPAWN_MARGIN;
-      if ((outside && b.x * b.vx + b.y * b.vy >= 0) || b.x * b.x + b.y * b.y > FAR_CULL_DISTANCE * FAR_CULL_DISTANCE) {
+      // Cull only once the WHOLE shape has left the screen and the bullet is not heading toward
+      // the box, so attacks spawned off screen travel in untouched and big bullets never vanish
+      // while partly visible. Pre-active bullets wait for their lifetime or to become active.
+      // Entering the box never fires wall hooks (only inside -> outside above does).
+      if (b.x * b.x + b.y * b.y > FAR_CULL_DISTANCE * FAR_CULL_DISTANCE) {
+        this.release(b, 'offbox');
+      } else if (b.armed && b.x * b.vx + b.y * b.vy >= 0 && this.offScreen(b, box)) {
         this.release(b, 'offbox');
       }
     }

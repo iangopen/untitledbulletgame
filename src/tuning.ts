@@ -51,10 +51,9 @@ export const WALL_DAMAGE = 5;
 /** Bullet pool capacity. Spawns past this fail with a dev warning. */
 export const BULLET_CAPACITY = 1024;
 /**
- * Bullets despawn once their center is this far outside the box AND they are moving away from it
- * (or standing still). Inbound bullets are never culled, so attacks can start off screen.
+ * Bullets despawn once their WHOLE shape is outside the screen AND they are not heading toward the
+ * box (BulletPool.offScreen), so nothing vanishes while partly visible and inbound bullets are kept.
  */
-export const DESPAWN_MARGIN = px(48);
 /** Safety cull: any bullet this far from the box center goes, whatever its direction. */
 export const FAR_CULL_DISTANCE = 2400;
 /**
@@ -67,6 +66,8 @@ export const SCREEN_HEIGHT = 720;
 export const OFFSCREEN_PAD = px(4);
 /** Spawn scale-pop duration (s). Draw AND hitbox scale together during it. */
 export const SPAWN_POP_TIME = 0.08;
+/** Shine at the pre-active -> active moment (s): a gameplay cue, drawn whatever the flash setting. */
+export const SHINE_TIME = 0.12;
 /** Despawn fade duration (s). Visual-only ghost; no collision. */
 export const DESPAWN_FADE_TIME = 0.12;
 /** Hit feedback. Shake intensity is a fraction of the view, so it needs no scaling. */

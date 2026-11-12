@@ -3,7 +3,7 @@ import { Soul, type MoveInput } from './Soul';
 import { BulletPool } from '../combat/BulletPool';
 import { bulletHitsCircle } from '../combat/hitTest';
 import { damageTypeOf, projectileHurts } from '../combat/projectile';
-import type { Circle } from '../combat/Collision';
+import type { Circle, Triangle } from '../combat/Collision';
 import { BOX_HEIGHT, BOX_WIDTH, WALL_CONTACT_EPS } from '../tuning';
 import { WALLS } from './Box';
 import { EventBus } from './EventBus';
@@ -21,6 +21,20 @@ export interface Prop {
   r: number;
   rotation: number;
   color: number;
+  /** A refraction prop (Prism): projectiles passing through it may fan out. */
+  refracts?: boolean;
+}
+
+/** A triangle prop's corners (box-local). */
+export function propTriangle(p: Prop, out: Triangle): Triangle {
+  const k = (2 * Math.PI) / 3;
+  out.ax = p.x + Math.cos(p.rotation) * p.r;
+  out.ay = p.y + Math.sin(p.rotation) * p.r;
+  out.bx = p.x + Math.cos(p.rotation + k) * p.r;
+  out.by = p.y + Math.sin(p.rotation + k) * p.r;
+  out.cx = p.x + Math.cos(p.rotation + 2 * k) * p.r;
+  out.cy = p.y + Math.sin(p.rotation + 2 * k) * p.r;
+  return out;
 }
 
 /**
@@ -88,6 +102,8 @@ export class World {
     box.clampLocal(soul.pos, soul.hitRadius);
     soul.tick(dt);
     pool.update(dt, box);
+    // Per-step hook for combo rules (director/interactions.ts), after bullets move, before hits.
+    this.bus.emit('stepped', { dt });
     if (!soul.alive) return;
 
     const hit = this.hit;
@@ -95,7 +111,8 @@ export class World {
     hit.y = soul.pos.y;
     hit.r = soul.hitRadius;
     for (const b of pool.all) {
-      if (!b.active || !bulletHitsCircle(b, hit)) continue;
+      // Pre-active (gold) bullets are drawn but never collide.
+      if (!b.active || !b.armed || !bulletHitsCircle(b, hit)) continue;
       // Projectile type rules (blue/orange) are decided in one place, from this step's movement.
       if (!projectileHurts(b.kind, soul.moving)) continue;
       // All damage goes through Soul.damage; it decides i-frames and KR.

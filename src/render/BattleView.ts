@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import type { World } from '../core/World';
 import type { Vec2, Wall } from '../core/Box';
-import { Bullet, bulletCircle, bulletRect, bulletTriangle, rectCorners } from '../combat/Bullet';
+import { Bullet, bulletCircle, bulletExtent, bulletRect, bulletTriangle, rectCorners, sinceArmed } from '../combat/Bullet';
 import type { Circle, Rect, Triangle } from '../combat/Collision';
 import { line, rgb, theme } from './theme';
 import { renderScale } from './display';
 import { px } from '../tuning';
 import { BoxFrame, interpBullet, lerpPoint } from './interp';
-import { flashScreen, shakeScreen } from './effects';
+import { drawShine, flashScreen, shakeScreen } from './effects';
 import {
   DESPAWN_FADE_TIME,
   HIT_FLASH_MS,
@@ -16,6 +16,7 @@ import {
   IFRAME_BLINK_PERIOD,
   DASH_DURATION,
   DASH_TRAIL_FADE,
+  SHINE_TIME,
 } from '../tuning';
 import { Dash } from '../abilities/actives/Dash';
 import { STEP } from '../core/Clock';
@@ -87,13 +88,16 @@ export class BattleView {
     b.a = src.a;
     b.b = src.b;
     b.kind = src.kind;
+    b.armed = src.armed; // a pre-active (gold) bullet fades out gold
+    b.growIn = false;
     b.noPop = true;
     g.t = 0;
     g.live = true;
   }
 
+  /** Type color once active; pre-active bullets are gold (harmless warning). */
   private colorOf(b: Bullet): number {
-    return theme.bullet[b.kind];
+    return b.armed ? theme.bullet[b.kind] : theme.preActive;
   }
 
   /** Puts a bullet's exact shape in world space. Returns vertex count in `w`, or 0 for a circle (center tmp, radius c.r). */
@@ -198,7 +202,17 @@ export class BattleView {
       this.path(bg, 3);
       bg.strokePath();
     }
-    for (const b of pool.all) if (b.active) this.fillBullet(bg, interpBullet(b, t, this.ib), 1);
+    for (const b of pool.all) {
+      if (!b.active) continue;
+      const ib = interpBullet(b, t, this.ib);
+      this.fillBullet(bg, ib, 1);
+      // Shine: the gold -> active moment (gameplay cue; see effects.drawShine).
+      const s = b.armAt > 0 ? sinceArmed(b) : -1;
+      if (s >= 0 && s < SHINE_TIME) {
+        const c = box.toWorld(ib, this.tmp);
+        drawShine(bg, c.x, c.y, bulletExtent(b), s / SHINE_TIME, theme.shine);
+      }
+    }
 
     // Soul: solid circle, drawn radius == hit radius. Blinks during i-frames.
     const sg = this.soulGfx;

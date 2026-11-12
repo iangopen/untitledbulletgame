@@ -6,7 +6,7 @@ import { pointInTriangle, type Triangle } from '../../combat/Collision';
 import { line, lineOffset } from '../../combat/patterns';
 import { bulletExtent } from '../../combat/Bullet';
 import { maxOffscreenDistance, offscreenStart } from '../../combat/offscreen';
-import type { Prop } from '../../core/World';
+import { propTriangle, type Prop } from '../../core/World';
 import { theme } from '../../render/theme';
 import { px } from '../../tuning';
 import { prismConfig, type PrismAttack, type PrismPhase, type PrismRules } from './prism.config';
@@ -147,7 +147,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     this.placedAt = this.clock;
     const r = this.rules.prismRadius;
     if (!this.prop) {
-      this.prop = { shape: 'triangle', x: 0, y: 0, r, rotation: 0, color: this.color };
+      this.prop = { shape: 'triangle', x: 0, y: 0, r, rotation: 0, color: this.color, refracts: true };
       this.world.props.push(this.prop);
     }
     this.prop.x = (this.rng() * 2 - 1) * (box.halfWidth - r - px(20));
@@ -155,17 +155,6 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     this.prop.rotation = this.rng() * Math.PI * 2;
   }
 
-  private prismTriangle(prop: Prop): Triangle {
-    const t = this.tri;
-    const k = (2 * Math.PI) / 3;
-    t.ax = prop.x + Math.cos(prop.rotation) * prop.r;
-    t.ay = prop.y + Math.sin(prop.rotation) * prop.r;
-    t.bx = prop.x + Math.cos(prop.rotation + k) * prop.r;
-    t.by = prop.y + Math.sin(prop.rotation + k) * prop.r;
-    t.cx = prop.x + Math.cos(prop.rotation + 2 * k) * prop.r;
-    t.cy = prop.y + Math.sin(prop.rotation + 2 * k) * prop.r;
-    return t;
-  }
 
   /** Any of our beams whose center enters the prism fans into refractCount beams that ignore prisms. */
   protected override update(): void {
@@ -185,7 +174,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     const pp = this.resolved.attacks.prism;
     const bp = this.resolved.attacks.beam;
     if (!prop || !pp || !bp) return;
-    const tri = this.prismTriangle(prop);
+    const tri = propTriangle(prop, this.tri);
     const n = this.rules.refractCount;
     for (const b of this.world.pool.all) {
       if (!b.active || b.owner !== this.id || b.shape !== 'beam' || b.flags & REFRACTED) continue;

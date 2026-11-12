@@ -24,6 +24,8 @@ export interface BulletContext {
 
 export type StepHook = (b: Bullet, dt: number, ctx: BulletContext) => void;
 export type WallHook = (b: Bullet, wall: Wall, ctx: BulletContext) => WallResponse;
+/** Called once, on the step a pre-active bullet becomes active (its age reaches armAt). */
+export type ArmHook = (b: Bullet, ctx: BulletContext) => void;
 
 export interface BulletSpec {
   shape: BulletShape;
@@ -53,6 +55,15 @@ export interface BulletSpec {
   gen?: number;
   /** Owner-defined bit flags (e.g. "already refracted"). */
   flags?: number;
+  /**
+   * Pre-active state: for this many seconds after spawning the bullet is drawn in the pre-active
+   * color (theme.preActive, gold) and NEVER collides, then it becomes active (its type's color and
+   * hit rule) with a shine. 0 (default) = active from the start.
+   */
+  armDelay?: number;
+  /** While pre-active, draw it growing from nothing to full size over armDelay (visual only; it can't collide yet). */
+  growIn?: boolean;
+  onArm?: ArmHook;
 }
 
 export class Bullet {
@@ -77,6 +88,12 @@ export class Bullet {
   noPop = false;
   gen = 0;
   flags = 0;
+  /** Age (s) at which the bullet becomes active; before that it is pre-active (drawn, never collides). */
+  armAt = 0;
+  /** Whether it is active (can collide). Set by the pool when age reaches armAt. */
+  armed = true;
+  growIn = false;
+  onArm: ArmHook | undefined = undefined;
   /** Pre-step position and rotation, for render interpolation only. Spawns start equal to the current state. */
   px = 0;
   py = 0;
@@ -104,6 +121,10 @@ export class Bullet {
     this.noPop = s.noPop ?? false;
     this.gen = s.gen ?? 0;
     this.flags = s.flags ?? 0;
+    this.armAt = Math.max(0, s.armDelay ?? 0);
+    this.armed = this.armAt <= 0;
+    this.growIn = s.growIn ?? false;
+    this.onArm = s.onArm;
     this.snapshot();
     return this;
   }
@@ -117,6 +138,8 @@ export class Bullet {
 
   /** Spawn-pop scale; draw and hitbox both use it. Eases 0.6 -> 1 (no overshoot, so the hitbox never exceeds its final size). */
   get scale(): number {
+    // Pre-active and growing: visual only (a pre-active bullet never collides).
+    if (!this.armed && this.growIn) return Math.min(1, this.age / this.armAt);
     if (this.noPop || this.age >= SPAWN_POP_TIME) return 1;
     const t = this.age / SPAWN_POP_TIME;
     return 0.6 + 0.4 * (1 - (1 - t) * (1 - t));
@@ -159,6 +182,11 @@ export function bulletTriangle(b: Bullet, out: Triangle): Triangle {
   out.cx = b.x + Math.cos(t0 + 2 * k) * r;
   out.cy = b.y + Math.sin(t0 + 2 * k) * r;
   return out;
+}
+
+/** Seconds since the bullet became active (negative while pre-active). Drawing uses it for the shine. */
+export function sinceArmed(b: Pick<Bullet, 'age' | 'armAt'>): number {
+  return b.age - b.armAt;
 }
 
 /** Farthest point of a bullet's full-size shape from its center (for off-screen spawns). */

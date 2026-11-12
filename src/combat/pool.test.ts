@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { BulletPool } from './BulletPool';
 import { Box } from '../core/Box';
 import { aimed, fan, line, ring } from './patterns';
-import { DESPAWN_MARGIN, SOUL_RADIUS } from '../tuning';
+import { SCREEN_WIDTH, SOUL_RADIUS } from '../tuning';
 import { World } from '../core/World';
 
 const box = new Box(320, 240, 300, 200);
@@ -50,14 +50,41 @@ describe('BulletPool', () => {
     expect(p.activeCount).toBe(0);
     expect(reasons).toEqual(['lifetime']);
   });
-  it('despawns once beyond the box by the margin, not before', () => {
+  it('despawns only once its whole shape has left the screen (a large bullet stays while partly visible)', () => {
     const p = new BulletPool(2);
-    const b = p.spawn({ shape: 'circle', x: 150 + DESPAWN_MARGIN - 1, y: 0, vx: 0, a: 5, damage: 1 })!;
+    const r = 60;
+    // Box center is at world x 320, so local x = world x - 320. Moving right, away from the box.
+    const b = p.spawn({ shape: 'circle', x: SCREEN_WIDTH + r - 1 - 320, y: 0, vx: 0.001, a: r, damage: 1, noPop: true })!;
     p.update(1 / 60, box);
-    expect(b.active).toBe(true);
-    b.x = 150 + DESPAWN_MARGIN + 0.5;
+    expect(b.active).toBe(true); // its left edge is still 1 px on screen
+    b.x = SCREEN_WIDTH + r + 0.5 - 320;
     p.update(1 / 60, box);
     expect(b.active).toBe(false);
+    // A small bullet just outside the box but on screen is no longer culled early.
+    const s = p.spawn({ shape: 'circle', x: 300, y: 0, vx: 1, a: 5, damage: 1 })!;
+    p.update(1 / 60, box);
+    expect(s.active).toBe(true);
+  });
+  it('pre-active bullets never collide, are never culled while waiting, and arm once at armAt', async () => {
+    const { bulletHitsCircle } = await import('./hitTest');
+    const w = new World(640, 360);
+    let armedAt = -1;
+    const b = w.pool.spawn({ shape: 'circle', x: 0, y: 0, a: 40, damage: 10, armDelay: 0.5, growIn: true, onArm: () => (armedAt = w.time) })!;
+    expect(b.armed).toBe(false);
+    // Overlapping the soul the whole time: a white bullet would hurt at once.
+    for (let i = 0; i < 29; i++) w.step({ dx: 0, dy: 0, slow: false }, 1 / 60);
+    expect(bulletHitsCircle(b, { x: w.soul.pos.x, y: w.soul.pos.y, r: w.soul.hitRadius })).toBe(true);
+    expect(w.soul.hp).toBe(w.soul.maxHp);
+    expect(w.soul.iframes).toBe(0);
+    expect(b.armed).toBe(false);
+    for (let i = 0; i < 2; i++) w.step({ dx: 0, dy: 0, slow: false }, 1 / 60);
+    expect(b.armed).toBe(true);
+    expect(armedAt).toBeCloseTo(0.5, 5);
+    expect(w.soul.hp).toBe(w.soul.maxHp - 10);
+    // Stationary and far outside the screen: kept while pre-active.
+    const far = w.pool.spawn({ shape: 'circle', x: -2000 + 640, y: 0, a: 5, damage: 1, armDelay: 1 })!;
+    w.step({ dx: 0, dy: 0, slow: false }, 1 / 60);
+    expect(far.active).toBe(true);
   });
   it('never culls a bullet heading toward the box, however far out (off-screen spawns)', () => {
     const p = new BulletPool(2);
