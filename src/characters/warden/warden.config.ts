@@ -2,7 +2,7 @@ import type { CharacterConfig } from '../config';
 import { px } from '../../tuning';
 import { makeForm, type CompositeForm } from '../../combat/composite';
 
-export type WardenAttack = 'punch' | 'spin' | 'rip';
+export type WardenAttack = 'punch' | 'toss' | 'rip';
 
 export interface WardenRules {
   /** Seconds each phase lasts (every punch, return and spin finishes inside it). */
@@ -23,9 +23,10 @@ export interface WardenRules {
   margin: number;
   /** Below this fraction of the wanted shove, the other direction is used instead. */
   minShoveFraction: number;
-  /** Spin: largest swing angle (rad), further limited so the turned box stays clear of the HUD bands; seconds to turn back to 0 at the end. */
-  spinMaxAngle: number;
-  spinReturn: number;
+  /** Toss: seconds rising (shrinking) and falling (growing back); seconds kept free after the landing. */
+  riseTime: number;
+  fallTime: number;
+  landLinger: number;
   /** Rip: seconds the hands take to pull the halves apart; seconds a merge punch takes to close the gap. */
   pullTime: number;
   mergeTime: number;
@@ -43,8 +44,9 @@ export interface WardenRules {
  *  rip:   cooldown s, windup s (hands / merge fist / re-center fist; lower = harder), gap px (between
  *         the halves, clamped to the room on screen), hold s (time split), either (chance the merge
  *         punch hits the right box instead of the left), back s (merge to re-center punch)
- *  spin:  cooldown s, speed rad/s (swing speed), duration s (how long the spin lasts), reverse
- *         (chance a swing turns back early)
+ *  toss:  cooldown s, windup s (hands; lower = harder), height (scale while airborne; lower = higher
+ *         toss = harder; clamped so a full turn fits on screen), speed rad/s (spin), turns (whole
+ *         turns while airborne, rounded), reverse (chance the spin turns back part way, 2+ turns)
  */
 export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
   id: 'warden',
@@ -62,7 +64,7 @@ export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
       to: 14,
       attacks: {
         punch: { cooldown: [3.0, 2.3], windup: [0.75, 0.55], distance: [px(110), px(170)], back: [1.3, 0.9], vertical: [0.1, 0.3] },
-        spin: { cooldown: [4.0, 3.6], speed: [1.2, 1.8], duration: [1.4, 2.2], reverse: [0, 0.3] },
+        toss: { cooldown: [7.0, 7.0], windup: [0.8, 0.65], height: [0.8, 0.68], speed: [3.2, 4.6], turns: [1, 2], reverse: [0, 0.3] },
       },
     },
     {
@@ -70,7 +72,7 @@ export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
       to: 20,
       attacks: {
         punch: { cooldown: [2.2, 1.6], windup: [0.55, 0.4], distance: [px(170), px(230)], back: [0.9, 0.6], vertical: [0.3, 0.5] },
-        spin: { cooldown: [3.6, 3.6], speed: [1.8, 2.6], duration: [2.2, 3.0], reverse: [0.3, 0.5] },
+        toss: { cooldown: [7.0, 7.0], windup: [0.65, 0.5], height: [0.66, 0.5], speed: [4.8, 6.4], turns: [2, 3], reverse: [0.3, 0.5] },
         rip: { cooldown: [7.5, 7.0], windup: [0.7, 0.5], gap: [px(70), px(120)], hold: [2.5, 3.5], either: [0, 0.5], back: [0.9, 0.6] },
       },
     },
@@ -78,7 +80,7 @@ export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
   rules: {
     phaseLength: 8,
     breather: 1,
-    phaseOrder: ['punch', 'spin', 'rip'],
+    phaseOrder: ['punch', 'toss', 'rip'],
     fistGap: px(3),
     fistPull: px(8),
     lungeTime: 0.08,
@@ -86,8 +88,9 @@ export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
     fistLinger: 0.12,
     margin: px(2),
     minShoveFraction: 0.35,
-    spinMaxAngle: 0.6,
-    spinReturn: 0.4,
+    riseTime: 0.45,
+    fallTime: 0.35,
+    landLinger: 0.2,
     pullTime: 0.35,
     mergeTime: 0.3,
   },

@@ -20,15 +20,16 @@ describe('The Warden config', () => {
     expect(validateConfig(wardenConfig)).toEqual([]);
     expect(registry[3]).toMatchObject({ id: 'warden', shape: 'golem', maxLevel: 20 });
   });
-  it('punch 1-20; spin joins at 6; rip at 15', () => {
+  it('punch 1-20; toss joins at 6; rip at 15', () => {
     for (const l of [1, 5]) expect(attacksAt(l)).toEqual(['punch']);
-    for (const l of [6, 14]) expect(attacksAt(l)).toEqual(['punch', 'spin']);
-    for (const l of [15, 20]) expect(attacksAt(l)).toEqual(['punch', 'rip', 'spin']);
+    for (const l of [6, 14]) expect(attacksAt(l)).toEqual(['punch', 'toss']);
+    for (const l of [15, 20]) expect(attacksAt(l)).toEqual(['punch', 'rip', 'toss']);
   });
   it('difficulty never decreases with level, per parameter', () => {
-    const up = ['distance', 'vertical', 'speed', 'duration', 'reverse', 'gap', 'hold', 'either'];
-    const down = ['cooldown', 'windup', 'back'];
-    for (const atk of ['punch', 'spin', 'rip'] as const) {
+    const up = ['distance', 'vertical', 'speed', 'turns', 'reverse', 'gap', 'hold', 'either'];
+    // height = the scale while airborne: lower = a higher toss = harder.
+    const down = ['cooldown', 'windup', 'back', 'height'];
+    for (const atk of ['punch', 'toss', 'rip'] as const) {
       let prev: Record<string, number> | undefined;
       for (let l = 1; l <= 20; l++) {
         const a = resolveLevel(wardenConfig, l).attacks[atk];
@@ -44,17 +45,22 @@ describe('The Warden config', () => {
       }
     }
   });
-  it('a punch and its return fit inside the cooldown; a spin and its return fit too', () => {
+  it('a punch and its return fit inside the cooldown; a toss fits its cooldown and its phase', () => {
     const r = wardenConfig.rules;
     for (let l = 1; l <= 20; l++) {
-      const { punch, spin, rip } = resolveLevel(wardenConfig, l).attacks;
+      const { punch, toss, rip } = resolveLevel(wardenConfig, l).attacks;
       if (rip) {
         const tail = r.pullTime + rip.hold! + 2 * (rip.windup! + r.lungeTime) + r.mergeTime + rip.back! + r.shoveTime + r.fistLinger;
         expect(tail, `rip L${l}`).toBeLessThanOrEqual(rip.cooldown!);
         expect(tail, `rip L${l} fits a phase`).toBeLessThanOrEqual(r.phaseLength);
       }
       expect(punch!.back! + r.shoveTime + punch!.windup! + r.lungeTime, `L${l}`).toBeLessThanOrEqual(punch!.cooldown!);
-      if (spin) expect(spin.duration! + r.spinReturn, `L${l}`).toBeLessThanOrEqual(spin.cooldown!);
+      if (toss) {
+        const c = new Warden(new World(640, 369), 1);
+        const tail = toss.windup! + r.lungeTime + c.tossTail(toss);
+        expect(tail, `toss L${l}`).toBeLessThanOrEqual(toss.cooldown!);
+        expect(tail, `toss L${l} fits a phase`).toBeLessThanOrEqual(r.phaseLength);
+      }
     }
   });
 });
@@ -121,8 +127,8 @@ describe('The Warden behaviour', () => {
   it('L1/L10/L20 over 40 s: phases, punches and spins; box always on screen and clear of the bands; zero damage alone', () => {
     const expected: Record<number, string[]> = {
       1: ['punch@0.0', 'breather@8.0', 'punch@9.0', 'breather@17.0', 'punch@18.0'],
-      10: ['punch@0.0', 'breather@8.0', 'spin@9.0', 'breather@17.0', 'punch@18.0'],
-      20: ['punch@0.0', 'breather@8.0', 'spin@9.0', 'breather@17.0', 'rip@18.0'],
+      10: ['punch@0.0', 'breather@8.0', 'toss@9.0', 'breather@17.0', 'punch@18.0'],
+      20: ['punch@0.0', 'breather@8.0', 'toss@9.0', 'breather@17.0', 'rip@18.0'],
     };
     for (const level of [1, 10, 20]) {
       for (const input of [STILL, { dx: 1, dy: 0, slow: false }, { dx: -1, dy: 1, slow: false }]) {
@@ -131,7 +137,7 @@ describe('The Warden behaviour', () => {
         if (!moving) {
           // eslint-disable-next-line no-console
           console.log(
-            `Warden L${level} 40 s: ${r.phases.join(' ')} | punches ${r.c.stats.punches}, returns ${r.c.stats.returns}, spins ${r.c.stats.spins} (${r.c.stats.swings} swings) | ` +
+            `Warden L${level} 40 s: ${r.phases.join(' ')} | punches ${r.c.stats.punches}, returns ${r.c.stats.returns}, tosses ${r.c.stats.tosses} (${r.c.stats.landings} landed) | ` +
               `box outline x ${r.ext.x0.toFixed(0)}-${r.ext.x1.toFixed(0)}, y ${r.ext.y0.toFixed(0)}-${r.ext.y1.toFixed(0)}, max |rot| ${((r.ext.rot * 180) / Math.PI).toFixed(1)} deg | ` +
               `steps off screen/in a band: box ${r.boxOut}, fist ${r.fistInBand + r.fistOff} of ${r.fistSteps}; fist parts inside the box: ${r.fistInBox}`,
           );
@@ -140,8 +146,9 @@ describe('The Warden behaviour', () => {
         expect(r.c.stats.punches).toBeGreaterThan(3);
         // The last return may still be due when the run ends.
         expect(r.c.stats.returns).toBeGreaterThanOrEqual(r.c.stats.punches - 1);
-        if (level >= 6) expect(r.c.stats.spins).toBeGreaterThan(0);
-        else expect(r.c.stats.spins).toBe(0);
+        if (level >= 6) expect(r.c.stats.tosses).toBeGreaterThan(0);
+        else expect(r.c.stats.tosses).toBe(0);
+        expect(r.c.stats.landings).toBe(r.c.stats.tosses);
         expect(r.boxOut).toBe(0);
         expect(r.fistInBand).toBe(0);
         expect(r.fistOff).toBe(0);
@@ -159,21 +166,30 @@ describe('The Warden behaviour', () => {
     expect(w.soul.hp).toBe(w.soul.maxHp);
   });
 
-  it('spins stay inside the safe angle, and the box is upright again after each spin', () => {
+  it('L20 tosses: shrink, whole turns while small, land upright at full size; on screen and clear of the bands', () => {
     const w = new World(640, 369);
     const c = new Warden(w, 4);
     c.setLevel(20);
-    const A = c.safeAngle();
-    let max = 0;
-    for (let i = 0; i < 60 * 18; i++) {
+    let bad = 0, landed = 0;
+    w.bus.on('boxLanded', () => landed++);
+    for (let i = 0; i < 60 * 60; i++) {
       c.tick(STEP);
       w.step(STILL, STEP);
-      max = Math.max(max, Math.abs(w.box.rotation));
+      for (const bx of w.boxes) {
+        const { hx, hy } = rotatedHalfExtents(bx.width, bx.height, bx.rotation);
+        if (bx.x - hx < 0 || bx.x + hx > VIEW.width || bx.y - hy < PLAY_TOP || bx.y + hy > PLAY_BOTTOM) bad++;
+      }
     }
-    expect(max).toBeGreaterThan(A * 0.7);
-    expect(max).toBeLessThanOrEqual(A + 1e-9);
-    // 18 s = after the first spin phase (9-17) and its breather.
-    expect(Math.abs(w.box.rotation)).toBeLessThan(1e-9);
+    // eslint-disable-next-line no-console
+    for (const t of c.tossLog) console.log(`toss@${t.at.toFixed(2)}: min scale ${t.minScale.toFixed(3)}, turned ${((t.turned * 180) / Math.PI).toFixed(0)} deg (${(t.turned / (2 * Math.PI)).toFixed(2)} turns${t.reversed ? ', reversed' : ''}), ${t.duration.toFixed(2)} s`);
+    expect(c.tossLog.length).toBeGreaterThanOrEqual(2);
+    expect(landed).toBe(c.tossLog.length);
+    for (const t of c.tossLog) {
+      expect(t.minScale).toBeLessThan(0.6);
+      expect(t.turned / (2 * Math.PI)).toBeGreaterThanOrEqual(2 - 1e-6);
+    }
+    expect(bad).toBe(0);
+    expect(w.box.scale).toBe(1);
   });
 });
 
@@ -275,21 +291,43 @@ function aimsAtBox(w: World, b: Bullet): boolean {
   return false;
 }
 
-describe('The Warden spin keeps moving', () => {
-  it('never holds still for more than one swing while a spin runs (reversals included)', () => {
+describe('The Warden toss', () => {
+  it('ends upright (a whole number of turns) at full size, reversals included', () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
       const w = new World(640, 369);
       const c = new Warden(w, seed);
-      c.fireNow('spin', 20);
-      let still = 0, maxStill = 0, last = w.box.rotation;
-      for (let i = 0; i < 60 * 2.9; i++) {
+      c.fireNow('toss', 20);
+      w.soul.pos.x = 150;
+      w.soul.pos.y = -80;
+      for (let i = 0; i < 60 * 5; i++) {
         c.tick(STEP);
         w.step(STILL, STEP);
-        still = Math.abs(w.box.rotation - last) < 1e-9 ? still + 1 : 0;
-        maxStill = Math.max(maxStill, still);
-        last = w.box.rotation;
+        const { hx, hy } = { hx: w.box.halfWidth - w.soul.hitRadius + 1e-9, hy: w.box.halfHeight - w.soul.hitRadius + 1e-9 };
+        expect(Math.abs(w.soul.pos.x) <= hx && Math.abs(w.soul.pos.y) <= hy).toBe(true);
       }
-      expect(maxStill, `seed ${seed}`).toBeLessThanOrEqual(2);
+      expect(c.tossLog.length, `seed ${seed}`).toBe(1);
+      expect(w.box.scale).toBe(1);
+      expect(w.box.rotation).toBeCloseTo(0, 9);
+      // The soul's relative spot survived the toss.
+      expect(w.soul.pos.x).toBeCloseTo(150, 6);
+      expect(w.soul.pos.y).toBeCloseTo(-80, 6);
     }
+  });
+
+  it('never starts while the box is split, and the box cannot split while tossed', () => {
+    const w = new World(640, 369);
+    const c = new Warden(w, 1);
+    expect(w.splitBox()).not.toBeNull();
+    c.fireNow('toss', 20);
+    for (let i = 0; i < 60 * 5; i++) {
+      c.tick(STEP);
+      w.step(STILL, STEP);
+      for (const b of w.boxes) expect(b.scale).toBe(1);
+    }
+    expect(c.stats.tosses).toBe(0);
+    const w2 = new World(640, 369);
+    w2.box.scaleTo(0.6, 0.3);
+    w2.step(STILL, STEP);
+    expect(w2.splitBox()).toBeNull();
   });
 });

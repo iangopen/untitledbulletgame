@@ -75,6 +75,9 @@ export const DESPAWN_FADE_TIME = 0.12;
 /** Hit feedback. Shake intensity is a fraction of the view, so it needs no scaling. */
 export const HIT_SHAKE_MS = 90;
 export const HIT_SHAKE_INTENSITY = 0.006;
+/** A tossed box landing (The Warden): a short, heavier shake. */
+export const LAND_SHAKE_MS = 140;
+export const LAND_SHAKE_INTENSITY = 0.01;
 export const HIT_FLASH_MS = 70;
 
 /** Timer mode: seconds to survive to win. */

@@ -30,7 +30,7 @@ import type { CharacterHandle } from '../characters/Character';
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
  * Mortimer (level 20 params, fired now from off screen): J snowfall · K snowball roll · L blizzard
  * Ulysses (level 20 params): U summon · Y axe swing · O sword rain
- * The Warden (level 20 params): , punch (and the return) · / spin · [ rip apart · ] merge punch · \ re-center
+ * The Warden (level 20 params): , punch (and the return) · / toss · [ rip apart · ] merge punch · \ re-center
  * Combos: X sword through a refraction prism (Prism + Ulysses) · . toggle Mortimer's blizzard phase (swords sync)
  */
 export class DebugScene extends Phaser.Scene {
@@ -143,7 +143,7 @@ export class DebugScene extends Phaser.Scene {
       Y: () => this.ulysses.fireNow('axe', 20),
       O: () => this.ulysses.fireNow('rain', 20),
       COMMA: () => this.warden.fireNow('punch', 20),
-      FORWARD_SLASH: () => this.warden.fireNow('spin', 20),
+      FORWARD_SLASH: () => this.warden.fireNow('toss', 20),
       // Rip and merge on demand (level 20 params): [ rips the box apart, ] punches the left half
       // into the right (merge, offset), BACKSLASH punches the merged box back to center.
       OPEN_BRACKET: () => this.warden.ripNow(this.wardenParams('rip')),

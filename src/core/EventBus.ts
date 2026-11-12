@@ -50,7 +50,9 @@ export interface GameEvents {
   /** Ulysses' phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */
   ulyssesPhaseChanged: { owner: string; phase: 'summon' | 'axe' | 'rain' | 'breather'; next: 'summon' | 'axe' | 'rain' };
   /** The Warden's phase changed (one phase per unlocked attack; 'breather' = nothing new). */
-  wardenPhaseChanged: { owner: string; phase: 'punch' | 'spin' | 'rip' | 'breather'; next: 'punch' | 'spin' | 'rip' };
+  wardenPhaseChanged: { owner: string; phase: 'punch' | 'toss' | 'rip' | 'breather'; next: 'punch' | 'toss' | 'rip' };
+  /** Ember's phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */
+  emberPhaseChanged: { owner: string; phase: 'embers' | 'sweep' | 'wildfire' | 'breather'; next: 'embers' | 'sweep' | 'wildfire' };
   /** The equipped active ability was used (Shift). */
   abilityUsed: { id: string };
   /** Shift was pressed while the active ability was still recharging (nothing happened). */

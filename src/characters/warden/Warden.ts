@@ -33,7 +33,7 @@ export class Warden extends Character<WardenAttack, WardenRules> {
   readonly config = wardenConfig;
   protected readonly attacks = {
     punch: (p: ResolvedAttack) => this.planPunch(p),
-    spin: (p: ResolvedAttack) => this.startSpin(p),
+    toss: (p: ResolvedAttack) => this.planToss(p),
     rip: (p: ResolvedAttack) => this.planRip(p),
   };
   /** Nothing travels in from off screen; the fist's wind-up is the lead. */
@@ -41,13 +41,16 @@ export class Warden extends Character<WardenAttack, WardenRules> {
   /** Phase as of the last step ('' until the first tick). */
   phase: WardenAttack | 'breather' | '' = '';
   /** Counters for verification: punches that shoved the box, return punches, spins started. */
-  readonly stats = { punches: 0, returns: 0, spins: 0, swings: 0, rips: 0, merges: 0, recenters: 0 };
+  readonly stats = { punches: 0, returns: 0, tosses: 0, landings: 0, rips: 0, merges: 0, recenters: 0 };
+  /** Verification log of tosses: smallest scale, total turn, airborne time. */
+  readonly tossLog: { at: number; minScale: number; turned: number; duration: number; reversed: boolean }[] = [];
   /** Verification log of rip events (own clock, world geometry). */
   readonly ripLog: string[] = [];
   /** The box a merge punch is driving into the other; merged once it stops. */
   private merging: Box | null = null;
 
-  private spin: { until: number; speed: number; reverse: number; swingEnd: number; dir: 1 | -1; returning: boolean } | null = null;
+  /** A running toss: rising, spinning while small (segments of whole turns), falling. */
+  private toss: { box: Box; stage: 'rise' | 'spin' | 'fall'; segs: { to: number; dur: number }[]; started: number; minScale: number; turned: number; lastRot: number; reversed: boolean } | null = null;
 
   private get rules(): WardenRules {
     return this.config.rules;
@@ -66,13 +69,13 @@ export class Warden extends Character<WardenAttack, WardenRules> {
     const p = this.resolved.attacks[id];
     let tail = 0;
     if (p && id === 'punch') tail = p.back! + this.rules.shoveTime + this.rules.fistLinger;
-    if (p && id === 'spin') tail = p.duration! + this.rules.spinReturn;
+    if (p && id === 'toss') tail = this.tossTail(p);
     if (p && id === 'rip') tail = this.ripTail(p);
     return nextPhaseArrival(this.rules, this.order, id, at, tail);
   }
 
-  protected override planAhead(id: WardenAttack, p: ResolvedAttack): number {
-    return id === 'punch' || id === 'rip' ? p.windup! + this.rules.lungeTime : 0;
+  protected override planAhead(_id: WardenAttack, p: ResolvedAttack): number {
+    return p.windup! + this.rules.lungeTime;
   }
 
   override lookSpecs(): LookSpec[] {
@@ -86,7 +89,7 @@ export class Warden extends Character<WardenAttack, WardenRules> {
       this.phase = st.phase;
       this.world.bus.emit('wardenPhaseChanged', { owner: this.id, phase: st.phase, next: st.next });
     }
-    this.stepSpin();
+    this.stepToss();
     this.stepMerge();
   }
 
@@ -337,57 +340,100 @@ export class Warden extends Character<WardenAttack, WardenRules> {
     });
   }
 
-  // --- Spin: the box swings back and forth (rotation only), then turns back to 0 ---
-  private startSpin(p: ResolvedAttack): void {
-    this.spin = { until: this.clock + p.duration!, speed: p.speed!, reverse: p.reverse!, swingEnd: this.clock, dir: this.rng() < 0.5 ? 1 : -1, returning: false };
-    this.stats.spins++;
+  // --- Toss (6+): hands grab the box and toss it up. Top-down, so it shrinks as it rises
+  // (Box.scaleTo; the soul scales with it), spins whole turns while small, and lands back at full
+  // size with a heavy shake (boxLanded). Never while split. ---
+
+  private spinTime(p: ResolvedAttack): number {
+    return (Math.max(1, Math.round(p.turns!)) * 2 * Math.PI) / p.speed!;
+  }
+
+  /** Seconds from the grab to the landing (the toss's window must hold it). */
+  tossTail(p: ResolvedAttack): number {
+    const r = this.rules;
+    return r.riseTime + this.spinTime(p) + r.fallTime + r.landLinger;
+  }
+
+  private planToss(p: ResolvedAttack): Shot[] {
+    return [{ lead: p.windup! + this.rules.lungeTime, fire: () => this.tossNow(p) }];
   }
 
   /**
-   * The largest angle (rad, up to spinMaxAngle) the box can turn to from upright and still have
-   * its whole outline on screen and clear of the HUD bands at every angle on the way.
+   * The largest scale at which the box, turned to any angle, keeps its whole outline on screen and
+   * clear of the HUD bands (its half-diagonal must fit the room around its center).
    */
-  safeAngle(): number {
-    const box = this.world.box;
+  safeSpinScale(box: Box = this.world.box): number {
     const m = this.rules.margin;
-    const roomY = Math.min(box.y - PLAY_TOP, PLAY_BOTTOM - box.y) - m;
-    const roomX = Math.min(box.x, VIEW.width - box.x) - m;
-    let a = 0;
-    // Extents grow with the angle up to the diagonal, so the first angle that does not fit ends it.
-    for (let t = 0; t <= this.rules.spinMaxAngle + 1e-9; t += 0.005) {
-      const e = rotatedHalfExtents(box.width, box.height, t);
-      if (e.hx > roomX || e.hy > roomY) break;
-      a = t;
-    }
-    return a;
+    const room = Math.min(box.y - PLAY_TOP, PLAY_BOTTOM - box.y, box.x, VIEW.width - box.x) - m;
+    const half = Math.hypot(box.width, box.height) / 2 / box.scale;
+    return Math.max(0.05, room / half);
   }
 
-  private stepSpin(): void {
-    const s = this.spin;
-    if (!s) return;
-    const box = this.world.box;
-    if (this.clock >= s.until) {
-      if (!s.returning) {
-        s.returning = true;
-        box.rotateTo(0, this.rules.spinReturn, 'sineInOut');
-      } else if (this.clock >= s.until + this.rules.spinReturn) {
-        this.spin = null;
+  /** Hands grab the left and right walls; on the grab the box is tossed (only a single, grounded box). */
+  tossNow(p: ResolvedAttack): void {
+    const world = this.world;
+    if (world.boxes.length !== 1 || this.toss) return;
+    const box = world.box;
+    let grabbed = false;
+    const grab = () => {
+      if (grabbed) return;
+      grabbed = true;
+      if (world.boxes.length !== 1 || world.box !== box || this.toss || box.scale !== 1) return;
+      const r = this.rules;
+      const s = Math.min(p.height!, this.safeSpinScale(box));
+      box.scaleTo(s, r.riseTime, 'quadOut');
+      // Whole turns; with chance `reverse` (and at least 2 turns) it turns back part way.
+      const N = Math.max(1, Math.round(p.turns!));
+      const dir = this.rng() < 0.5 ? 1 : -1;
+      const T = this.spinTime(p);
+      const segs: { to: number; dur: number }[] = [];
+      const base = box.rotation;
+      const reversed = N >= 2 && this.rng() < p.reverse!;
+      if (reversed) {
+        const k1 = Math.ceil(N / 2);
+        segs.push({ to: base + dir * k1 * 2 * Math.PI, dur: (T * k1) / N });
+        segs.push({ to: base + dir * (2 * k1 - N) * 2 * Math.PI, dur: (T * (N - k1)) / N });
+      } else segs.push({ to: base + dir * N * 2 * Math.PI, dur: T });
+      this.toss = { box, stage: 'rise', segs, started: this.clock, minScale: 1, turned: 0, lastRot: box.rotation, reversed };
+      this.stats.tosses++;
+    };
+    const opts = { form: HAND_FORM, ride: this.rules.riseTime * 0.5 };
+    this.spawnFist(p, 'left', grab, opts);
+    this.spawnFist(p, 'right', grab, opts);
+  }
+
+  private stepToss(): void {
+    const t = this.toss;
+    if (!t) return;
+    const box = t.box;
+    t.minScale = Math.min(t.minScale, box.scale);
+    t.turned += Math.abs(box.rotation - t.lastRot);
+    t.lastRot = box.rotation;
+    if (box.moving) return;
+    const r = this.rules;
+    if (t.stage === 'rise' || t.stage === 'spin') {
+      const seg = t.segs.shift();
+      if (seg) {
+        t.stage = 'spin';
+        box.rotateTo(seg.to, seg.dur, 'quadInOut');
+        return;
       }
+      t.stage = 'fall';
+      box.normalizeRotation();
+      t.lastRot = box.rotation;
+      box.scaleTo(1, r.fallTime, 'quadIn');
       return;
     }
-    if (this.clock < s.swingEnd - 1e-9) return;
-    // Next swing: toward side `dir` (most of the safe angle), then the side flips. Sometimes it
-    // reverses early instead: it stops half way there and turns back.
-    const A = this.safeAngle();
-    if (A <= 0) return;
-    const full = s.dir * A * (0.75 + 0.25 * this.rng());
-    const target = this.rng() < s.reverse ? box.rotation + 0.5 * (full - box.rotation) : full;
-    s.dir = s.dir === 1 ? -1 : 1;
-    const dur = Math.min(Math.abs(target - box.rotation) / s.speed, s.until - this.clock);
-    if (dur <= 1e-3) return; // nothing to turn this step; try the other side next step
-    box.rotateTo(target, dur, 'sineInOut');
-    s.swingEnd = this.clock + dur;
-    this.stats.swings++;
+    // Landed.
+    this.toss = null;
+    if (this.world.boxes.includes(box)) this.world.bus.emit('boxLanded', { x: box.x, y: box.y });
+    this.stats.landings++;
+    this.tossLog.push({ at: t.started, minScale: t.minScale, turned: t.turned, duration: this.clock - t.started, reversed: t.reversed });
+  }
+
+  /** Whether a toss is running (the box is airborne). */
+  get airborne(): boolean {
+    return !!this.toss;
   }
 
   /** Dev (DebugScene): shots fired with fireNow, kept on their own lead times. */
@@ -400,9 +446,8 @@ export class Warden extends Character<WardenAttack, WardenRules> {
   override fireNow(id: WardenAttack, level = this.level): boolean {
     const p = resolveLevel(this.config, level).attacks[id];
     if (!p) return false;
-    if (id === 'spin') this.startSpin(p);
-    else {
-      const shots = id === 'rip' ? this.planRip(p) : this.planPunch(p);
+    {
+      const shots = id === 'rip' ? this.planRip(p) : id === 'toss' ? this.planToss(p) : this.planPunch(p);
       const need = Math.max(...shots.map((x) => x.lead));
       for (const x of shots) this.devQueue.push({ at: this.clock + need - x.lead, fire: x.fire });
       this.runDevQueue();
@@ -416,7 +461,7 @@ export class Warden extends Character<WardenAttack, WardenRules> {
     if (this.active) super.tick(dt);
     else {
       this.clock += dt;
-      this.stepSpin();
+      this.stepToss();
       this.stepMerge();
     }
     this.runDevQueue();
@@ -430,7 +475,7 @@ export class Warden extends Character<WardenAttack, WardenRules> {
   }
 
   override dispose(): void {
-    this.spin = null;
+    this.toss = null;
     this.merging = null;
     this.devQueue = [];
   }

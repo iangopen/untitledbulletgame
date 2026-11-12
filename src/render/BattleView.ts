@@ -16,6 +16,8 @@ import {
   HIT_FLASH_MS,
   HIT_SHAKE_INTENSITY,
   HIT_SHAKE_MS,
+  LAND_SHAKE_INTENSITY,
+  LAND_SHAKE_MS,
   IFRAME_BLINK_PERIOD,
   DASH_DURATION,
   DASH_TRAIL_FADE,
@@ -110,6 +112,7 @@ export class BattleView {
   }));
   private ghostNext = 0;
   private lastHitSeen = -1;
+  private landed = false;
   showHitboxes = false;
   /** Box geometry being drawn this frame (interpolated). All drawing transforms go through it. */
   private readonly frame = new BoxFrame();
@@ -129,6 +132,8 @@ export class BattleView {
   ) {
     // Draw order = depth: box, walls, ghosts, props, glows, bullets, shines, soul (+ trail), overlay, HUD.
     this.looks = new LookCache(scene);
+    // A tossed box lands heavily: a short shake on the next frame (through the effects gate).
+    world.bus.on('boxLanded', () => (this.landed = true));
     this.boxGfx = scene.add.graphics().setDepth(0);
     this.walls = new SpriteLayer(scene, 1);
     this.ghostGlows = new SpriteLayer(scene, 2);
@@ -394,6 +399,11 @@ export class BattleView {
       shakeScreen(cam, HIT_SHAKE_MS, HIT_SHAKE_INTENSITY);
       const [r, gr, b] = rgb(theme.hitFlash);
       flashScreen(cam, HIT_FLASH_MS, r, gr, b);
+    }
+
+    if (this.landed) {
+      this.landed = false;
+      shakeScreen(this.scene.cameras.main, LAND_SHAKE_MS, LAND_SHAKE_INTENSITY);
     }
 
     this.drawOverlay();
