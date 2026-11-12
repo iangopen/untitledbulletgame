@@ -21,6 +21,9 @@ export interface MortimerRules {
   gustSpacing: number;
   gustThickness: number;
   gustWaveGap: number;
+  /** Blizzard: how far a gust streak bows (px) and how many straight pieces draw (and hit) its curve. */
+  gustBend: number;
+  gustSegments: number;
 }
 
 /**
@@ -75,5 +78,7 @@ export const mortimerConfig: CharacterConfig<MortimerAttack, MortimerRules> = {
     gustSpacing: px(14),
     gustThickness: px(2.5),
     gustWaveGap: 0.12,
+    gustBend: px(4),
+    gustSegments: 6,
   },
 };

@@ -4,6 +4,7 @@ import { nextPhaseArrival, phaseAt, type PhaseState } from '../phases';
 import { bulletExtent, type Bullet, type StepHook, type Wall } from '../../combat/Bullet';
 import { line, lineOffset, lineSlots, type BulletStyle } from '../../combat/patterns';
 import { maxOffscreenDistance } from '../../combat/offscreen';
+import { curvedStreak, makeForm, type CompositeForm } from '../../combat/composite';
 import { theme } from '../../render/theme';
 import { mortimerConfig, type MortimerAttack, type MortimerRules } from './mortimer.config';
 
@@ -66,7 +67,19 @@ export class Mortimer extends Character<MortimerAttack, MortimerRules> {
     const base = { damage: p.damage!, owner: this.id, kind: 'blue' as const, noPop: true };
     if (id === 'snowfall') return { ...base, shape: 'circle', a: this.rules.flakeSize, onStep: this.swayHook(p.sway!) };
     if (id === 'roll') return { ...base, shape: 'circle', a: p.size!, onStep: this.growHook(p.growth!) };
-    return { ...base, shape: 'beam', a: p.length!, b: this.rules.gustThickness, faceVelocity: true };
+    // A wind gust: a thin curved streak (composite of short pieces along the curve; drawn == hitbox).
+    return { ...base, shape: 'composite', form: this.gustForm(p.length!), a: 0, faceVelocity: true };
+  }
+
+  private readonly gustForms = new Map<number, CompositeForm>();
+  private gustForm(length: number): CompositeForm {
+    let f = this.gustForms.get(length);
+    if (!f) {
+      const r = this.rules;
+      f = makeForm(curvedStreak(length, r.gustThickness, r.gustBend, r.gustSegments));
+      this.gustForms.set(length, f);
+    }
+    return f;
   }
 
   /** `count` filled slots out of `slots`, at random; the rest are gaps. */

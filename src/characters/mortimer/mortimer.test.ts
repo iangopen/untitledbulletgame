@@ -79,7 +79,7 @@ function runMortimer(level: number, seconds: number, input = STILL) {
     w.step(input, STEP);
     for (const b of w.pool.all) {
       if (!b.active || entered.has(b)) continue;
-      const atk = b.shape === 'beam' ? 'blizzard' : b.a > mortimerConfig.rules.flakeSize + 1 ? 'roll' : 'snowfall';
+      const atk = b.shape === 'composite' ? 'blizzard' : b.a > mortimerConfig.rules.flakeSize + 1 ? 'roll' : 'snowfall';
       // Snowfall arrives when a flake reaches the top edge's height (edge flakes sway beside the box).
       if (atk === 'snowfall' ? b.y < -w.box.halfHeight : Math.abs(b.x) > w.box.halfWidth || Math.abs(b.y) > w.box.halfHeight) continue;
       entered.add(b);
