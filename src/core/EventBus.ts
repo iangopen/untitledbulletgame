@@ -28,6 +28,10 @@ export interface GameEvents {
   boxMoved: { x: number; y: number; duration: number };
   /** A rotation was requested (absolute target, radians). */
   boxRotated: { rotation: number; duration: number };
+  /** A toss scale was requested (target scale, 1 = on the ground). */
+  boxScaled: { scale: number; duration: number };
+  /** A tossed box landed back at full size (renderers shake on it). */
+  boxLanded: { x: number; y: number };
   /** The soul's box was ripped into two halves side by side (`soulBox` = the half the soul is in). */
   boxSplit: { soulBox: 'left' | 'right'; gapAxis: 'x'; width: number; height: number };
   /** Two boxes merged back into one (its world center and size). */

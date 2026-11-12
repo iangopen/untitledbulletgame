@@ -68,6 +68,15 @@ export class Box {
   private size: Track | null = null;
   private pos: Track | null = null;
   private rot: Track | null = null;
+  private scl: Track | null = null;
+  /**
+   * Toss scale (1 = on the ground). The box's real size is width x height; scaling multiplies both
+   * (and any running resize). The soul's box-local position and radius scale with it (World), so it
+   * stays inside at the same relative spot. Bullets are world-fixed and keep their size.
+   */
+  scale = 1;
+  /** Factor the size changed by through scaling this step (1 = none). World scales the soul by it. */
+  contentScale = 1;
   /**
    * Local-space shift (this step) that contents must apply to stay world-fixed when an anchored
    * resize moves the center. World applies it to the soul and bullets.
@@ -105,7 +114,7 @@ export class Box {
     return this.height / 2;
   }
   get moving(): boolean {
-    return !!(this.size || this.pos || this.rot);
+    return !!(this.size || this.pos || this.rot || this.scl);
   }
 
   toWorld(local: Vec2, out: Vec2 = { x: 0, y: 0 }): Vec2 {
@@ -195,6 +204,26 @@ export class Box {
     this.rotateTo((this.rot ? this.rot.to[0]! : this.rotation) + delta, duration, ease);
   }
 
+  /**
+   * Scale the box (and everything that rides it: the soul's position and radius) to `scale` x its
+   * unscaled size, about its center. Not clamped to the minimum size (a toss is a view change).
+   */
+  scaleTo(scale: number, duration = 0, ease: Easing = 'quadOut'): void {
+    const s = Math.max(0.05, scale);
+    this.scl = track([this.scale], [s], duration, ease);
+    this.bus?.emit('boxScaled', { scale: s, duration });
+    if (duration <= 0) this.stepScale(0);
+  }
+
+  /** Drop whole turns from the rotation (same frame; used after full spins). */
+  normalizeRotation(): void {
+    if (this.rot) return;
+    const n = Math.round(this.rotation / (2 * Math.PI));
+    if (n === 0) return;
+    this.rotation -= n * 2 * Math.PI;
+    this.prev.rotation -= n * 2 * Math.PI;
+  }
+
   setWall(wall: Wall, state: Partial<WallState>): void {
     Object.assign(this.walls[wall], state);
     const w = this.walls[wall];
@@ -204,7 +233,9 @@ export class Box {
   /** Back to the constructor state: geometry, safe walls, no running tracks. */
   reset(): void {
     Object.assign(this, { x: this.defaults.x, y: this.defaults.y, width: this.defaults.width, height: this.defaults.height, rotation: this.defaults.rotation });
-    this.size = this.pos = this.rot = null;
+    this.size = this.pos = this.rot = this.scl = null;
+    this.scale = 1;
+    this.contentScale = 1;
     for (const w of WALLS) Object.assign(this.walls[w], safeWall());
     this.contentShift.x = this.contentShift.y = 0;
     this.snapshot();
@@ -220,6 +251,8 @@ export class Box {
   step(dt: number): void {
     this.contentShift.x = 0;
     this.contentShift.y = 0;
+    this.contentScale = 1;
+    if (this.scl) this.stepScale(dt);
     if (this.size) this.stepSize(dt);
     if (this.pos) this.stepPos(dt);
     if (this.rot) this.stepRot(dt);
@@ -250,6 +283,19 @@ export class Box {
       this.contentShift.y -= sy;
     }
     if (k >= 1) this.size = null;
+  }
+
+  private stepScale(dt: number): void {
+    const t = this.scl!;
+    const k = advance(t, dt);
+    const s = lerp(t.from[0]!, t.to[0]!, k);
+    const f = s / this.scale;
+    this.scale = s;
+    this.width *= f;
+    this.height *= f;
+    if (this.size) for (const a of [this.size.from, this.size.to]) { a[0] = a[0]! * f; a[1] = a[1]! * f; }
+    this.contentScale *= f;
+    if (k >= 1) this.scl = null;
   }
 
   private stepPos(dt: number): void {

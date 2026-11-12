@@ -165,7 +165,7 @@ export class World {
    */
   splitBox(): [Box, Box] | null {
     const old = this.box;
-    if (this.boxes.length !== 1 || old.width / 2 < BOX_MIN_WIDTH) return null;
+    if (this.boxes.length !== 1 || old.scale !== 1 || old.width / 2 < BOX_MIN_WIDTH) return null;
     const hw = old.width / 4;
     const c = Math.cos(old.rotation), s = Math.sin(old.rotation);
     const make = (sign: number) => {
@@ -234,6 +234,13 @@ export class World {
       soul.pos.x += sh.x;
       soul.pos.y += sh.y;
     }
+    // A toss scales the box about its center: the soul scales with it (same relative spot, scaled
+    // radius and speed), so it stays inside. Bullets are world-fixed and keep their size.
+    if (box.contentScale !== 1) {
+      soul.pos.x *= box.contentScale;
+      soul.pos.y *= box.contentScale;
+    }
+    soul.scale = box.scale;
     if (box.x !== ox || box.y !== oy || box.rotation !== orot) this.keepBulletsWorldFixed(ox, oy, orot);
     // Other boxes (split) move on their own tracks; bullets are not stored in their frames.
     const others = this.otherBoxes;
