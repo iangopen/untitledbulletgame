@@ -8,10 +8,12 @@ import { SPAWN_POP_TIME } from '../tuning';
  *  - rect:     a = half width, b = half height (along rotation)
  *  - triangle: a = circumradius (equilateral, first vertex points along rotation)
  *  - beam:     a = length, b = thickness (a long rect centered on the position)
+ *  - composite: `form` (combat/composite.ts) = several primitive parts in the bullet's frame; a, b unused
  * Drawing AND collision both derive from these via the shape functions below,
  * so what you see is exactly what hits you.
  */
-export type BulletShape = 'circle' | 'rect' | 'triangle' | 'beam';
+export type BulletShape = 'circle' | 'rect' | 'triangle' | 'beam' | 'composite';
+import type { CompositeForm } from './composite';
 import type { Wall } from '../core/Box';
 export type { Wall };
 /** What a bullet does after its center crosses a box wall from inside. */
@@ -64,6 +66,10 @@ export interface BulletSpec {
   /** While pre-active, draw it growing from nothing to full size over armDelay (visual only; it can't collide yet). */
   growIn?: boolean;
   onArm?: ArmHook;
+  /** Parts for shape 'composite' (drawn and collided from the same definition). */
+  form?: CompositeForm;
+  /** Draw a faint decorative glow around it (light rays). Never part of the hitbox. */
+  glow?: boolean;
 }
 
 export class Bullet {
@@ -94,6 +100,8 @@ export class Bullet {
   armed = true;
   growIn = false;
   onArm: ArmHook | undefined = undefined;
+  form: CompositeForm | null = null;
+  glow = false;
   /** Pre-step position and rotation, for render interpolation only. Spawns start equal to the current state. */
   px = 0;
   py = 0;
@@ -125,6 +133,8 @@ export class Bullet {
     this.armed = this.armAt <= 0;
     this.growIn = s.growIn ?? false;
     this.onArm = s.onArm;
+    this.form = s.form ?? null;
+    this.glow = s.glow ?? false;
     this.snapshot();
     return this;
   }
@@ -190,7 +200,8 @@ export function sinceArmed(b: Pick<Bullet, 'age' | 'armAt'>): number {
 }
 
 /** Farthest point of a bullet's full-size shape from its center (for off-screen spawns). */
-export function bulletExtent(spec: Pick<BulletSpec, 'shape' | 'a' | 'b'>): number {
+export function bulletExtent(spec: Pick<BulletSpec, 'shape' | 'a' | 'b'> & { form?: CompositeForm | null }): number {
+  if (spec.shape === 'composite') return spec.form?.extent ?? 0;
   const b = spec.b ?? spec.a;
   if (spec.shape === 'beam') return Math.hypot(spec.a / 2, b / 2);
   if (spec.shape === 'rect') return Math.hypot(spec.a, b);

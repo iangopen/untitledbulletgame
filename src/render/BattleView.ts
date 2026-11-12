@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import type { World } from '../core/World';
 import type { Vec2, Wall } from '../core/Box';
-import { Bullet, bulletCircle, bulletExtent, bulletRect, bulletTriangle, rectCorners, sinceArmed } from '../combat/Bullet';
-import type { Circle, Rect, Triangle } from '../combat/Collision';
+import { Bullet, bulletExtent, rectCorners, sinceArmed } from '../combat/Bullet';
+import { bulletPrimitives, type Primitive } from '../combat/composite';
+import type { Circle, Rect } from '../combat/Collision';
 import { hud, line, rgb, theme, VIEW } from './theme';
 import { renderScale } from './display';
 import { px } from '../tuning';
@@ -22,6 +23,8 @@ import { Dash } from '../abilities/actives/Dash';
 import { STEP } from '../core/Clock';
 
 const GHOSTS = 256;
+/** Glow layers around light rays: [extra half-size px, alpha factor]. Decorative only. */
+const GLOW_LAYERS: readonly [number, number][] = [[7, 0.5], [3.5, 1]];
 /** Wall -> indices into the box corner list [TL, TR, BR, BL]. */
 const WALL_EDGES: readonly [Wall, number, number][] = [
   ['top', 0, 1],
@@ -57,8 +60,8 @@ export class BattleView {
 
   // Scratch objects: no per-frame allocation.
   private readonly c: Circle = { x: 0, y: 0, r: 0 };
-  private readonly r: Rect = { x: 0, y: 0, hw: 0, hh: 0, rotation: 0 };
-  private readonly t: Triangle = { ax: 0, ay: 0, bx: 0, by: 0, cx: 0, cy: 0 };
+  /** Scratch rect for glow layers. */
+  private readonly gr: Rect = { x: 0, y: 0, hw: 0, hh: 0, rotation: 0 };
   private readonly pts: Vec2[] = [0, 1, 2, 3].map(() => ({ x: 0, y: 0 }));
   private readonly w: Vec2[] = [0, 1, 2, 3].map(() => ({ x: 0, y: 0 }));
   private readonly tmp: Vec2 = { x: 0, y: 0 };
@@ -89,6 +92,8 @@ export class BattleView {
     b.b = src.b;
     b.kind = src.kind;
     b.armed = src.armed; // a pre-active (gold) bullet fades out gold
+    b.form = src.form;
+    b.glow = src.glow;
     b.growIn = false;
     b.noPop = true;
     g.t = 0;
@@ -100,22 +105,25 @@ export class BattleView {
     return b.armed ? theme.bullet[b.kind] : theme.preActive;
   }
 
-  /** Puts a bullet's exact shape in world space. Returns vertex count in `w`, or 0 for a circle (center tmp, radius c.r). */
-  private shapeWorld(b: Bullet): number {
+  /**
+   * Puts one primitive of a bullet's exact shape in world space. Returns the vertex count in `w`,
+   * or 0 for a circle (center tmp, radius c.r).
+   */
+  private primWorld(p: Primitive): number {
     const box = this.frame;
-    if (b.shape === 'circle') {
-      bulletCircle(b, this.c);
-      box.toWorld(this.c, this.tmp);
+    if (p.kind === 'circle') {
+      this.c.r = p.c.r;
+      box.toWorld(p.c, this.tmp);
       return 0;
     }
-    if (b.shape === 'triangle') {
-      const t = bulletTriangle(b, this.t);
+    if (p.kind === 'tri') {
+      const t = p.t;
       this.tmp2.x = t.ax; this.tmp2.y = t.ay; box.toWorld(this.tmp2, this.w[0]);
       this.tmp2.x = t.bx; this.tmp2.y = t.by; box.toWorld(this.tmp2, this.w[1]);
       this.tmp2.x = t.cx; this.tmp2.y = t.cy; box.toWorld(this.tmp2, this.w[2]);
       return 3;
     }
-    rectCorners(bulletRect(b, this.r), this.pts);
+    rectCorners(p.r, this.pts);
     for (let i = 0; i < 4; i++) box.toWorld(this.pts[i]!, this.w[i]);
     return 4;
   }
@@ -127,15 +135,40 @@ export class BattleView {
     g.closePath();
   }
 
+  /** Fill a bullet: every primitive of its exact shape (bulletPrimitives, the same ones collision uses). */
   private fillBullet(g: Phaser.GameObjects.Graphics, b: Bullet, alpha: number): void {
-    const n = this.shapeWorld(b);
-    g.fillStyle(this.colorOf(b), alpha);
-    if (n === 0) {
-      g.fillCircle(this.tmp.x, this.tmp.y, this.c.r);
-    } else {
-      this.path(g, n);
-      g.fillPath();
-    }
+    const color = this.colorOf(b);
+    if (b.glow) this.drawGlow(g, b, color, alpha);
+    g.fillStyle(color, alpha);
+    bulletPrimitives(b, (p) => {
+      const n = this.primWorld(p);
+      if (n === 0) g.fillCircle(this.tmp.x, this.tmp.y, this.c.r);
+      else {
+        this.path(g, n);
+        g.fillPath();
+      }
+    });
+  }
+
+  /**
+   * Decorative glow (light rays): faint, wider rects around each rect part. Never collides; the
+   * solid core drawn on top is the hitbox (CLAUDE.md: glows are decorative).
+   */
+  private drawGlow(g: Phaser.GameObjects.Graphics, b: Bullet, color: number, alpha: number): void {
+    const r = this.gr;
+    bulletPrimitives(b, (p) => {
+      if (p.kind !== 'rect') return;
+      for (const [pad, k] of GLOW_LAYERS) {
+        r.x = p.r.x; r.y = p.r.y; r.rotation = p.r.rotation;
+        r.hw = p.r.hw + pad;
+        r.hh = p.r.hh + pad;
+        rectCorners(r, this.pts);
+        for (let i = 0; i < 4; i++) this.frame.toWorld(this.pts[i]!, this.w[i]);
+        g.fillStyle(color, theme.glowAlpha * k * alpha);
+        this.path(g, 4);
+        g.fillPath();
+      }
+    });
   }
 
   /**
@@ -279,13 +312,15 @@ export class BattleView {
     og.lineStyle(1 / renderScale(), theme.hitboxOutline, 1);
     for (const b of pool.all) {
       if (!b.active) continue;
-      const n = this.shapeWorld(b);
-      if (n === 0) {
-        og.strokeCircle(this.tmp.x, this.tmp.y, this.c.r);
-      } else {
-        this.path(og, n);
-        og.strokePath();
-      }
+      // Through the collision primitives (composites part by part); glows are never outlined.
+      bulletPrimitives(b, (p) => {
+        const n = this.primWorld(p);
+        if (n === 0) og.strokeCircle(this.tmp.x, this.tmp.y, this.c.r);
+        else {
+          this.path(og, n);
+          og.strokePath();
+        }
+      });
     }
     const sw = box.toWorld(soul.pos, this.tmp);
     og.strokeCircle(sw.x, sw.y, soul.hitRadius);

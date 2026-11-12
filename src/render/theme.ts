@@ -34,6 +34,8 @@ export const theme = {
    * about to shine" warning. Distinct from orange (#ff8a1c) by hue and lightness.
    */
   preActive: 0xe9cf6a,
+  /** Decorative glow around light rays (alpha of the inner layer). Never part of a hitbox. */
+  glowAlpha: 0.16,
   /** The shine at the gold -> active moment. */
   shine: 0xffffff,
   /** Character accent colors (one per character; never red). */
