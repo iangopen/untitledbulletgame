@@ -1,4 +1,5 @@
 import { Character, type Shot } from '../Character';
+import { nextPhaseArrival, phaseAt, type PhaseState } from '../phases';
 import type { ResolvedAttack } from '../config';
 import type { Wall } from '../../combat/Bullet';
 import { pointInTriangle, type Triangle } from '../../combat/Collision';
@@ -10,7 +11,7 @@ import { theme } from '../../render/theme';
 import { px } from '../../tuning';
 import { prismConfig, type PrismAttack, type PrismPhase, type PrismRules } from './prism.config';
 
-export type PrismPhaseState = { phase: PrismPhase | 'breather'; next: PrismPhase };
+export type PrismPhaseState = PhaseState<PrismPhase>;
 
 /** Bullet flag: this beam came out of a refraction prism and ignores prisms from now on. */
 export const REFRACTED = 1;
@@ -45,24 +46,12 @@ export class Prism extends Character<PrismAttack, PrismRules> {
 
   /** The phase at own-clock time `t`: wall/ray for phaseLength s, then a breather before the next. */
   phaseAt(t: number): PrismPhaseState {
-    const { phaseLength: L, breather: B, phaseOrder: order } = this.rules;
-    const k = Math.floor(t / (L + B));
-    const cur = order[k % order.length]!;
-    return t - k * (L + B) < L ? { phase: cur, next: cur } : { phase: 'breather', next: order[(k + 1) % order.length]! };
+    return phaseAt(this.rules, this.rules.phaseOrder, t);
   }
 
   /** Arrivals only inside the attack's own phase window. */
   protected override nextArrival(id: PrismAttack, at: number): number {
-    const { phaseLength: L, breather: B, phaseOrder: order, attackPhase } = this.rules;
-    const want = attackPhase[id];
-    let k = Math.floor(at / (L + B));
-    for (let i = 0; i <= order.length; i++, k++) {
-      if (order[k % order.length] !== want) continue;
-      const start = k * (L + B);
-      if (at < start) return start;
-      if (at < start + L) return at;
-    }
-    return at;
+    return nextPhaseArrival(this.rules, this.rules.phaseOrder, this.rules.attackPhase[id], at);
   }
 
   /** phaseIntensity x the band's rate inside each phase. */

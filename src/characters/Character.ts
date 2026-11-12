@@ -68,6 +68,12 @@ export abstract class Character<A extends string = string, R = Record<string, nu
   /** Game seconds this character has ticked (its own clock for planned spawns). */
   protected clock = 0;
   private pending: Pending[] = [];
+  /**
+   * Pre-fire each attack's first plan so the opening arrives on time (its bullets may then appear
+   * already on screen). Characters whose projectiles must always spawn off screen turn this off;
+   * their first arrivals wait for the off-screen travel instead.
+   */
+  protected readonly preFireOpening: boolean = true;
   /** Attacks whose first plan has run (later plans shift instead of pre-firing). */
   private readonly planned = new Set<string>();
 
@@ -143,7 +149,7 @@ export abstract class Character<A extends string = string, R = Record<string, nu
           // Arrive on the beat, or as soon as the slowest shot can if the beat is too close.
           // (Only shift when a shot truly needs longer, so the sub-step remainder of t is kept.)
           const need = Math.max(...shots.map((s) => s.lead));
-          if (!this.planned.has(id)) {
+          if (!this.planned.has(id) && this.preFireOpening) {
             // First plan: pre-fire. A shot that needs longer than the time left spawns now,
             // already advanced along its path, so the opening arrives on its beat instead of late.
             for (const s of shots) {
@@ -162,6 +168,19 @@ export abstract class Character<A extends string = string, R = Record<string, nu
       this.timers[id] = t;
     }
     this.firePending();
+  }
+
+  /**
+   * Dev tool (DebugScene): run one attack right now with the params of `level` (default: the
+   * current level), spawning its shots immediately instead of on the beat. False if not unlocked there.
+   */
+  fireNow(id: A, level = this.level): boolean {
+    const p = resolveLevel(this.config, level).attacks[id];
+    if (!p) return false;
+    const shots = this.attacks[id](p);
+    if (shots) for (const s of shots) s.fire();
+    this.started({ attack: id, started: false });
+    return true;
   }
 
   /** Spawn every planned shot whose time has come (in time order). */
