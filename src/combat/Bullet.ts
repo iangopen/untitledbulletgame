@@ -25,7 +25,11 @@ export interface BulletContext {
 }
 
 export type StepHook = (b: Bullet, dt: number, ctx: BulletContext) => void;
-export type WallHook = (b: Bullet, wall: Wall, ctx: BulletContext) => WallResponse;
+/**
+ * `box` is set when the wall belongs to another box than the bullet's frame (the box is split);
+ * for the soul's box it is undefined (the bullet's own frame).
+ */
+export type WallHook = (b: Bullet, wall: Wall, ctx: BulletContext, box?: import('../core/Box').Box) => WallResponse;
 /** Called once, on the step a pre-active bullet becomes active (its age reaches armAt). */
 export type ArmHook = (b: Bullet, ctx: BulletContext) => void;
 

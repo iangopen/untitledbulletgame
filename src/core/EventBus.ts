@@ -28,6 +28,10 @@ export interface GameEvents {
   boxMoved: { x: number; y: number; duration: number };
   /** A rotation was requested (absolute target, radians). */
   boxRotated: { rotation: number; duration: number };
+  /** The soul's box was ripped into two halves side by side (`soulBox` = the half the soul is in). */
+  boxSplit: { soulBox: 'left' | 'right'; gapAxis: 'x'; width: number; height: number };
+  /** Two boxes merged back into one (its world center and size). */
+  boxMerged: { x: number; y: number; width: number; height: number };
   /** A wall became safe or damaging. */
   wallStateChanged: { wall: Wall; damaging: boolean; damage: number; type: DamageType };
   /** A damaging wall touched the soul and the damage applied (not blocked by i-frames). */
@@ -42,7 +46,7 @@ export interface GameEvents {
   /** Ulysses' phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */
   ulyssesPhaseChanged: { owner: string; phase: 'summon' | 'axe' | 'rain' | 'breather'; next: 'summon' | 'axe' | 'rain' };
   /** The Warden's phase changed (one phase per unlocked attack; 'breather' = nothing new). */
-  wardenPhaseChanged: { owner: string; phase: 'punch' | 'spin' | 'breather'; next: 'punch' | 'spin' };
+  wardenPhaseChanged: { owner: string; phase: 'punch' | 'spin' | 'rip' | 'breather'; next: 'punch' | 'spin' | 'rip' };
   /** The equipped active ability was used (Shift). */
   abilityUsed: { id: string };
   /** Shift was pressed while the active ability was still recharging (nothing happened). */

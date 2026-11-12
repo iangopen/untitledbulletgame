@@ -117,7 +117,7 @@ export class Mortimer extends Character<MortimerAttack, MortimerRules> {
     const style = this.style('snowfall', p);
     const opts = { edge: 'top' as const, spacing: this.rules.flakeSpacing, speed: p.speed!, style };
     const gaps = this.gapsFor(lineSlots(box, opts), p.count!);
-    return [{ lead: lineOffset(box, opts) / p.speed!, fire: () => void line(pool, box, { ...opts, gaps }) }];
+    return [{ lead: lineOffset(box, opts) / p.speed!, fire: () => void line(pool, this.world.box, { ...opts, gaps }) }];
   }
 
   /**
@@ -147,7 +147,7 @@ export class Mortimer extends Character<MortimerAttack, MortimerRules> {
     const edge = this.nextSide();
     const opts = { edge, count: this.rules.rollLanes, speed: p.speed!, style: this.style('roll', p) };
     const gaps = this.gapsFor(this.rules.rollLanes, p.count!);
-    return [{ lead: lineOffset(box, opts) / p.speed!, fire: () => void line(pool, box, { ...opts, gaps }) }];
+    return [{ lead: lineOffset(box, opts) / p.speed!, fire: () => void line(pool, this.world.box, { ...opts, gaps }) }];
   }
 
   /**
@@ -171,7 +171,7 @@ export class Mortimer extends Character<MortimerAttack, MortimerRules> {
     return [{
       lead: off / p.speed!,
       fire: () => {
-        for (let k = 0; k < p.count!; k++) line(pool, box, { ...opts, offset: off + k * this.rules.gustWaveGap * p.speed! });
+        for (let k = 0; k < p.count!; k++) line(pool, this.world.box, { ...opts, offset: off + k * this.rules.gustWaveGap * p.speed! });
       },
     }];
   }

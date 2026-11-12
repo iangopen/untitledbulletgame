@@ -101,7 +101,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     return [{
       lead,
       fire: () => {
-        line(pool, box, { edge, spacing: this.rules.volleySpacing, speed: p.speed!, gapSize: p.gapSize!, gapAt, style });
+        line(pool, this.world.box, { edge, spacing: this.rules.volleySpacing, speed: p.speed!, gapSize: p.gapSize!, gapAt, style });
       },
     }];
   }
@@ -112,7 +112,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
    * or aimed through the prism), starting off screen on that line.
    */
   private planBeams(p: ResolvedAttack): Shot[] {
-    const { box } = this.world;
+
     const prismP = this.resolved.attacks.prism;
     const extent = bulletExtent({ shape: 'beam', a: p.length!, b: this.rules.beamThickness });
     const shots: Shot[] = [];
@@ -126,6 +126,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
       // The path is worked out against the box as it is now (for the lead) and again when the ray
       // spawns, so it still crosses the box (and the prism) if the box was shoved or turned meanwhile.
       const path = () => {
+        const box = this.world.box;
         const [nx, ny] = INWARD[edge];
         const ex = nx !== 0 ? -nx * box.halfWidth : u * box.halfWidth;
         const ey = ny !== 0 ? -ny * box.halfHeight : u * box.halfHeight;
@@ -220,11 +221,13 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     this.prop.rotation = this.propWorld.rotation - box.rotation;
   }
 
-  /** Whether the box (shoved by another character) now covers part of the prism. */
+  /** Whether any box (shoved or ripped apart by another character) now covers part of the prism. */
   private propOverlapsBox(): boolean {
-    const p = this.prop!;
-    const { box } = this.world;
-    return Math.abs(p.x) < box.halfWidth + p.r && Math.abs(p.y) < box.halfHeight + p.r;
+    const r = this.prop!.r;
+    return this.world.boxes.some((box) => {
+      const l = box.toLocal(this.propWorld);
+      return Math.abs(l.x) < box.halfWidth + r && Math.abs(l.y) < box.halfHeight + r;
+    });
   }
 
   /** Any of our beams whose center enters the prism fans into refractCount beams that ignore prisms. */

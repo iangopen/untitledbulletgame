@@ -111,7 +111,7 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
     // Formed against the box as it is at the spawn moment (it may have been shoved or turned). If
     // the row would form in a HUD band, the next edge that fits is used instead.
     const others = EDGES.filter((e) => e !== first);
-    return [{ lead: p.grow!, fire: () => void this.spawnClear([first, ...others].map((e) => () => line(pool, box, { ...rowFor(e), gaps }))) }];
+    return [{ lead: p.grow!, fire: () => void this.spawnClear([first, ...others].map((e) => () => line(pool, this.world.box, { ...rowFor(e), gaps }))) }];
   }
 
   /**
@@ -214,14 +214,18 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
    * without a dash.
    */
   private planRain(p: ResolvedAttack): Shot[] {
-    const { box, pool } = this.world;
+    const { pool } = this.world;
     const count = p.count!;
     const style = this.swordStyle(p, p.windup!, Math.PI / 2, { onStep: this.rainHook(p) });
     const opts = { edge: 'top' as const, count, speed: 0, offset: this.formOffset(this.rules.swordLength / 2), style };
-    const gapSize = rainGapSlots(box.width, count, this.rules.swordWidth, this.rules.rainGap);
     const gapAt = this.rng();
     // A row that would form in the top HUD band (box shoved up) is skipped.
-    return [{ lead: p.windup!, fire: () => void this.spawnClear([() => line(pool, box, { ...opts, gapSize, gapAt })]) }];
+    return [{ lead: p.windup!, fire: () => {
+      // Against the soul's box as it is now (half width while The Warden has the box split).
+      const b = this.world.box;
+      const gapSize = rainGapSlots(b.width, count, this.rules.swordWidth, this.rules.rainGap);
+      void this.spawnClear([() => line(pool, b, { ...opts, gapSize, gapAt })]);
+    } }];
   }
 
   /** Each sword shines up to `jitter` s after the row's beat (nearly together), then drops fallGap later. */

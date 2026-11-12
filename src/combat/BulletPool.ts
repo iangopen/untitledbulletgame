@@ -62,6 +62,41 @@ export class BulletPool implements BulletContext {
     return p.x + e < 0 || p.x - e > SCREEN_WIDTH || p.y + e < 0 || p.y - e > SCREEN_HEIGHT;
   }
 
+  private readonly ol: Vec2 = { x: 0, y: 0 };
+  /** A bullet's position (stored in `box`'s frame) in box `o`'s frame. */
+  private otherLocal(box: Box, o: Box, b: Bullet): Vec2 {
+    this.ol.x = b.x;
+    this.ol.y = b.y;
+    return o.toLocal(box.toWorld(this.ol, this.ol), this.ol);
+  }
+  private insideOther(box: Box, o: Box, b: Bullet): boolean {
+    const l = this.otherLocal(box, o, b);
+    return Math.abs(l.x) <= o.halfWidth && Math.abs(l.y) <= o.halfHeight;
+  }
+  /** Reflect a bullet off a wall of box `o` (in o's frame), then store it back in `box`'s frame. */
+  private bounceIn(box: Box, o: Box, b: Bullet, wall: Wall): void {
+    const d = o.rotation - box.rotation;
+    const c = Math.cos(d), s = Math.sin(d);
+    // Velocity into o's frame.
+    let vx = b.vx * c + b.vy * s;
+    let vy = -b.vx * s + b.vy * c;
+    const l = this.otherLocal(box, o, b);
+    if (wall === 'left' || wall === 'right') {
+      vx = -vx;
+      l.x = Math.sign(l.x) * (2 * o.halfWidth - Math.abs(l.x));
+    } else {
+      vy = -vy;
+      l.y = Math.sign(l.y) * (2 * o.halfHeight - Math.abs(l.y));
+    }
+    b.vx = vx * c - vy * s;
+    b.vy = vx * s + vy * c;
+    const w = o.toWorld(l, l);
+    const back = box.toLocal(w, w);
+    b.x = back.x;
+    b.y = back.y;
+    if (b.faceVelocity) b.rotation = Math.atan2(b.vy, b.vx);
+  }
+
   release(b: Bullet, reason: DespawnReason = 'cleared'): void {
     if (!b.active) return;
     b.active = false;
@@ -80,7 +115,7 @@ export class BulletPool implements BulletContext {
    * Advance every active bullet one fixed step in box-local space:
    * hook, motion, spin, lifetime, wall crossings, off-box despawn.
    */
-  update(dt: number, box: Box): void {
+  update(dt: number, box: Box, others: readonly Box[] = []): void {
     const hw = box.halfWidth;
     const hh = box.halfHeight;
     for (const b of this.all) {
@@ -99,6 +134,9 @@ export class BulletPool implements BulletContext {
         if (!b.active) continue;
       }
       const wasInside = Math.abs(b.x) <= hw && Math.abs(b.y) <= hh;
+      // Inside-ness in every other box (split), measured in that box's own frame.
+      let insideMask = 0;
+      for (let k = 0; k < others.length; k++) if (this.insideOther(box, others[k]!, b)) insideMask |= 1 << k;
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       if (b.faceVelocity && (b.vx !== 0 || b.vy !== 0)) b.rotation = Math.atan2(b.vy, b.vx);
@@ -125,6 +163,19 @@ export class BulletPool implements BulletContext {
           continue;
         }
       }
+      // Wall hooks for the other boxes: a crossing from inside one of them to outside it fires the
+      // hook with that box's wall (and the box). 'bounce' reflects in that box's frame.
+      for (let k = 0; k < others.length && b.active; k++) {
+        if (!(insideMask & (1 << k)) || this.insideOther(box, others[k]!, b)) continue;
+        const o = others[k]!;
+        const l = this.otherLocal(box, o, b);
+        const ohw = o.halfWidth, ohh = o.halfHeight;
+        const wall: Wall = l.x > ohw ? 'right' : l.x < -ohw ? 'left' : l.y > ohh ? 'bottom' : 'top';
+        const res = b.onWall ? b.onWall(b, wall, this, o) : 'pass';
+        if (res === 'die') this.release(b, 'wall');
+        else if (res === 'bounce') this.bounceIn(box, o, b, wall);
+      }
+      if (!b.active) continue;
       // Cull only once the WHOLE shape has left the screen and the bullet is not heading toward
       // the box, so attacks spawned off screen travel in untouched and big bullets never vanish
       // while partly visible. Pre-active bullets wait for their lifetime or to become active.

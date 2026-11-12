@@ -307,20 +307,17 @@ export class BattleView {
     this.clockS += realDt;
     const t = this.showHitboxes ? 1 : Math.min(1, Math.max(0, alpha));
     const box = this.frame.set(this.world.box, t);
-    const hw = box.halfWidth;
-    const hh = box.halfHeight;
-
-    // Box: corners local -> world so rotation (Phase 5) just works.
-    this.pts[0]!.x = -hw; this.pts[0]!.y = -hh;
-    this.pts[1]!.x = hw; this.pts[1]!.y = -hh;
-    this.pts[2]!.x = hw; this.pts[2]!.y = hh;
-    this.pts[3]!.x = -hw; this.pts[3]!.y = hh;
-    for (let i = 0; i < 4; i++) box.toWorld(this.pts[i]!, this.w[i]);
+    // Every box (two while split): fill under all walls, then walls, each through its own
+    // interpolated frame. The soul's box frame (`box`) is what bullets and the soul draw through.
     const g = this.boxGfx;
     g.clear();
     g.fillStyle(theme.boxFill, 1);
-    this.path(g, 4);
-    g.fillPath();
+    const frames = this.world.boxes.map((bx) => (bx === this.world.box ? box : this.frameOf(bx).set(bx, t)));
+    for (const f of frames) {
+      this.boxCorners(f);
+      this.path(g, 4);
+      g.fillPath();
+    }
     // Textures follow the render resolution (quality setting, devicePixelRatio, window size).
     if (this.looks.sync(renderScale())) {
       for (const l of this.layers) l.reset();
@@ -330,21 +327,24 @@ export class BattleView {
 
     // Walls: safe = thin white; damaging = thick lime (normal) or magenta (KR). Never red. Cached
     // line looks stretched along each wall (anti-aliased long edges at any rotation).
-    for (const [wall, a, b] of WALL_EDGES) {
-      const ws = this.world.box.walls[wall];
-      const p0 = this.w[a]!;
-      const p1 = this.w[b]!;
-      const width = ws.damaging ? line.danger : line.box;
-      const color = ws.damaging ? (ws.type === 'kr' ? theme.kr : theme.wallDamaging) : theme.boxBorder;
-      const look = this.looks.line(width);
-      const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
-      this.walls
-        .next(look)
-        .setPosition((p0.x + p1.x) / 2, (p0.y + p1.y) / 2)
-        .setRotation(Math.atan2(p1.y - p0.y, p1.x - p0.x))
-        .setScale(len / look.size, 1 / look.k)
-        .setTint(color);
-    }
+    this.world.boxes.forEach((bx, i) => {
+      this.boxCorners(frames[i]!);
+      for (const [wall, a, b] of WALL_EDGES) {
+        const ws = bx.walls[wall];
+        const p0 = this.w[a]!;
+        const p1 = this.w[b]!;
+        const width = ws.damaging ? line.danger : line.box;
+        const color = ws.damaging ? (ws.type === 'kr' ? theme.kr : theme.wallDamaging) : theme.boxBorder;
+        const look = this.looks.line(width);
+        const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+        this.walls
+          .next(look)
+          .setPosition((p0.x + p1.x) / 2, (p0.y + p1.y) / 2)
+          .setRotation(Math.atan2(p1.y - p0.y, p1.x - p0.x))
+          .setScale(len / look.size, 1 / look.k)
+          .setTint(color);
+      }
+    });
 
     // Fast-fading despawn ghosts (visual only).
     for (const gh of this.ghosts) {
@@ -423,6 +423,24 @@ export class BattleView {
     }
   }
 
+  /** Interpolation frames for boxes other than the soul's (split boxes). */
+  private readonly frames = new WeakMap<object, BoxFrame>();
+  private frameOf(b: object): BoxFrame {
+    let f = this.frames.get(b);
+    if (!f) this.frames.set(b, (f = new BoxFrame()));
+    return f;
+  }
+
+  /** A box frame's four corners in world space, into `this.w` [TL, TR, BR, BL]. */
+  private boxCorners(f: BoxFrame): void {
+    const hw = f.halfWidth, hh = f.halfHeight;
+    this.pts[0]!.x = -hw; this.pts[0]!.y = -hh;
+    this.pts[1]!.x = hw; this.pts[1]!.y = -hh;
+    this.pts[2]!.x = hw; this.pts[2]!.y = hh;
+    this.pts[3]!.x = -hw; this.pts[3]!.y = hh;
+    for (let i = 0; i < 4; i++) f.toWorld(this.pts[i]!, this.w[i]);
+  }
+
   /** Dev: outline every collision shape, computed through the collision geometry. */
   private drawOverlay(): void {
     const og = this.overlayGfx;
@@ -451,6 +469,12 @@ export class BattleView {
     }
     const sw = box.toWorld(soul.pos, this.tmp);
     og.strokeCircle(sw.x, sw.y, soul.hitRadius);
+    // Every box's walls (the soul is clamped to and touches only its own box's).
+    for (const bx of this.world.boxes) {
+      this.boxCorners(bx === this.world.box ? box : this.frameOf(bx).set(bx, 1));
+      this.path(og, 4);
+      og.strokePath();
+    }
   }
 
   /** HP bar rect in the 1280x720 layout: centered in the bottom HUD band (the HTML HUD aligns its text to it). */
