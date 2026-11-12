@@ -13,12 +13,18 @@ import { h } from './dom';
  *   prevented), so keyboard play is unaffected by clicking the UI.
  * - Geometry: the overlay copies the canvas's on-page rect (watched with ResizeObserver), so UI and
  *   canvas stay aligned at any window size or pixel ratio.
+ * - Under-layer: a second, identical root BELOW the canvas, for HUD text that bullets pass over (the
+ *   battle HUD). The battle camera clears transparent, so the text shows through wherever nothing is
+ *   drawn and bullets are always drawn on top of it. It takes no mouse input (the canvas covers it).
  */
 class UiLayer {
   private host: HTMLElement | null = null;
   private overlay: HTMLElement | null = null;
   private root: HTMLElement | null = null;
+  private underlay: HTMLElement | null = null;
+  private underRoot: HTMLElement | null = null;
   private screen: HTMLElement | null = null;
+  private under: HTMLElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
 
   /** Scale from layout px to CSS px (exposed for tests and diagnostics). */
@@ -37,6 +43,12 @@ class UiLayer {
     this.root.id = 'ui-root';
     this.overlay.appendChild(this.root);
     host.appendChild(this.overlay);
+    this.underlay = h('div');
+    this.underlay.id = 'ui-underlay';
+    this.underRoot = h('div');
+    this.underRoot.id = 'ui-under-root';
+    this.underlay.appendChild(this.underRoot);
+    host.insertBefore(this.underlay, host.firstChild);
 
     // Clicking UI must not move focus or select text; the wheel must not scroll the page.
     this.overlay.addEventListener('mousedown', (e) => e.preventDefault());
@@ -53,6 +65,9 @@ class UiLayer {
   /** Track the game canvas: the overlay copies its on-page rect, so they can never disagree. */
   attachCanvas(canvas: HTMLCanvasElement): void {
     this.canvas = canvas;
+    // Stack the canvas above the under-layer (and below the overlay).
+    canvas.style.position = 'relative';
+    canvas.style.zIndex = '1';
     if ('ResizeObserver' in window) new ResizeObserver(() => this.sync()).observe(canvas);
     this.sync();
   }
@@ -79,33 +94,51 @@ class UiLayer {
       left = (hw - w) / 2;
       top = (hh - hgt) / 2;
     }
-    Object.assign(this.overlay.style, { left: `${left}px`, top: `${top}px`, width: `${w}px`, height: `${hgt}px` });
+    const rect = { left: `${left}px`, top: `${top}px`, width: `${w}px`, height: `${hgt}px` };
+    Object.assign(this.overlay.style, rect);
     this.scale = w / VIEW.width;
     this.root.style.transform = `scale(${this.scale}, ${hgt / VIEW.height})`;
+    if (this.underlay && this.underRoot) {
+      Object.assign(this.underlay.style, rect);
+      this.underRoot.style.transform = this.root.style.transform;
+    }
   }
 
-  /** Replace the current screen; it fades in. */
-  show(screen: HTMLElement): void {
+  /** Replace the current screen (and its optional under-layer part, drawn below the canvas); they fade in. */
+  show(screen: HTMLElement, under?: HTMLElement): void {
     if (!this.root) return;
     this.clear();
-    screen.classList.add('screen');
-    this.root.appendChild(screen);
+    for (const [el, root] of [[screen, this.root], [under, this.underRoot]] as const) {
+      if (!el || !root) continue;
+      el.classList.add('screen');
+      root.appendChild(el);
+      void el.offsetWidth; // commit opacity 0 before transitioning
+      el.classList.add('shown');
+    }
     this.screen = screen;
-    void screen.offsetWidth; // commit opacity 0 before transitioning
-    screen.classList.add('shown');
+    this.under = under ?? null;
   }
 
   /** Fade the current screen out (scene transitions call this alongside the camera fade). */
   fadeOut(): void {
-    this.screen?.classList.remove('shown');
-    this.screen?.classList.add('leaving');
+    for (const el of [this.screen, this.under]) {
+      el?.classList.remove('shown');
+      el?.classList.add('leaving');
+    }
   }
 
-  /** Remove `screen` if it is the one shown (or whatever is shown, when omitted). */
+  /** Remove `screen` if it is the one shown (or whatever is shown, when omitted), with its under part. */
   clear(screen?: HTMLElement): void {
     if (!this.screen || (screen && screen !== this.screen)) return;
     this.screen.remove();
+    this.under?.remove();
     this.screen = null;
+    this.under = null;
+  }
+
+  /** Show or hide the current screen's under-layer part (e.g. while another scene draws over it). */
+  setUnderVisible(v: boolean): void {
+    if (this.under) this.under.style.visibility = v ? '' : 'hidden';
   }
 
   get current(): HTMLElement | null {

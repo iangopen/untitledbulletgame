@@ -36,6 +36,9 @@ async function boot(): Promise<void> {
     width: size.width,
     height: size.height,
     backgroundColor: theme.background,
+    // The canvas can be transparent so the battle HUD (in the under-layer) shows beneath bullets;
+    // every camera still clears to the background color except the battle's (see BattleScene).
+    transparent: true,
     antialias: true,
     // FIT + CENTER_BOTH keeps the 16:9 view centered; the canvas is already device-pixel sized (see display.ts).
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },

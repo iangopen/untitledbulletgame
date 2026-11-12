@@ -33,7 +33,7 @@ export function go(scene: Phaser.Scene, key: string, data?: object): void {
 }
 
 /** Mount a DOM screen for this scene and remove it when the scene shuts down. */
-export function mountScreen(scene: Phaser.Scene, screen: HTMLElement): void {
-  ui.show(screen);
+export function mountScreen(scene: Phaser.Scene, screen: HTMLElement, under?: HTMLElement): void {
+  ui.show(screen, under);
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => ui.clear(screen));
 }
