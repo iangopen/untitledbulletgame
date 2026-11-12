@@ -3,12 +3,13 @@ import type { World } from '../core/World';
 import type { Vec2, Wall } from '../core/Box';
 import { Bullet, bulletExtent, rectCorners, sinceArmed } from '../combat/Bullet';
 import { bulletPrimitives, type Primitive } from '../combat/composite';
-import type { Circle, Rect } from '../combat/Collision';
+import type { Circle } from '../combat/Collision';
 import { hud, line, rgb, theme, VIEW } from './theme';
 import { renderScale } from './display';
 import { px } from '../tuning';
 import { BoxFrame, interpBullet, lerpPoint } from './interp';
-import { drawShine, flashScreen, shakeScreen } from './effects';
+import { flashScreen, shakeScreen, shineShape } from './effects';
+import { LookCache, type Look } from './LookCache';
 import {
   DESPAWN_FADE_TIME,
   HIT_FLASH_MS,
@@ -23,8 +24,48 @@ import { Dash } from '../abilities/actives/Dash';
 import { STEP } from '../core/Clock';
 
 const GHOSTS = 256;
-/** Glow layers around light rays: [extra half-size px, alpha factor]. Decorative only. */
-const GLOW_LAYERS: readonly [number, number][] = [[7, 0.5], [3.5, 1]];
+
+/**
+ * A pool of Phaser images at one depth, reused every frame: `begin`, then `next(look)` per thing
+ * drawn (positioned/rotated/scaled/tinted by the caller), then `end` hides the rest. Images are
+ * only ever created when a frame needs more than before, never per frame.
+ */
+class SpriteLayer {
+  private readonly items: Phaser.GameObjects.Image[] = [];
+  private used = 0;
+  constructor(
+    private readonly scene: Phaser.Scene,
+    private readonly depth: number,
+  ) {}
+  begin(): void {
+    this.used = 0;
+  }
+  next(look: Look): Phaser.GameObjects.Image {
+    let img = this.items[this.used];
+    if (!img) {
+      img = this.scene.add.image(0, 0, look.key).setDepth(this.depth);
+      this.items.push(img);
+    } else if (img.texture.key !== look.key) {
+      img.setTexture(look.key);
+    }
+    this.used++;
+    img.setVisible(true).setOrigin(look.ox, look.oy).setAlpha(1);
+    return img;
+  }
+  end(): void {
+    for (let i = this.used; i < this.items.length; i++) {
+      const img = this.items[i]!;
+      if (img.visible) img.setVisible(false);
+    }
+  }
+  /**
+   * The cache is rebuilding its textures under the same keys: drop every reference to the old
+   * (destroyed) ones, so `next` re-binds each image to the new texture.
+   */
+  reset(): void {
+    for (const img of this.items) img.setTexture('__DEFAULT').setVisible(false);
+  }
+}
 /** Wall -> indices into the box corner list [TL, TR, BR, BL]. */
 const WALL_EDGES: readonly [Wall, number, number][] = [
   ['top', 0, 1],
@@ -34,16 +75,27 @@ const WALL_EDGES: readonly [Wall, number, number][] = [
 ];
 
 /**
- * Draws a World with Phaser Graphics: flat solid shapes, crisp edges, no textures.
- * Bullet geometry comes from the same functions collision uses (combat/Bullet.ts),
- * so drawn shapes and hitboxes cannot drift apart.
+ * Draws a World: flat solid shapes, crisp edges. Every bullet look (shape/composite and size; gold
+ * or white is just the tint) is rasterised ONCE into a cached white texture at the current render
+ * resolution (LookCache) from the same primitives collision uses, and drawn as pooled sprites that
+ * are positioned, rotated, scaled and tinted each frame. The soul, dash trail, props, shines, walls
+ * and ray glows are cached looks too. Only the box fill, HUD bars and the dev overlays are Graphics
+ * (axis-aligned or debug). The hitbox overlay still strokes the true collision primitives directly.
  */
 export class BattleView {
   private readonly boxGfx: Phaser.GameObjects.Graphics;
-  private readonly bulletGfx: Phaser.GameObjects.Graphics;
-  private readonly soulGfx: Phaser.GameObjects.Graphics;
   private readonly overlayGfx: Phaser.GameObjects.Graphics;
   private readonly hudGfx: Phaser.GameObjects.Graphics;
+  readonly looks: LookCache;
+  private readonly walls: SpriteLayer;
+  private readonly ghostGlows: SpriteLayer;
+  private readonly ghostSprites: SpriteLayer;
+  private readonly propSprites: SpriteLayer;
+  private readonly glowSprites: SpriteLayer;
+  private readonly bulletSprites: SpriteLayer;
+  private readonly shineSprites: SpriteLayer;
+  private readonly soulSprites: SpriteLayer;
+  private readonly layers: SpriteLayer[];
   /** Visual-only despawn fades. Plain Bullet objects reused as snapshots; never in the pool, never collide. */
   private readonly ghosts: { b: Bullet; t: number; live: boolean }[] = Array.from({ length: GHOSTS }, () => ({
     b: new Bullet(),
@@ -60,8 +112,6 @@ export class BattleView {
 
   // Scratch objects: no per-frame allocation.
   private readonly c: Circle = { x: 0, y: 0, r: 0 };
-  /** Scratch rect for glow layers. */
-  private readonly gr: Rect = { x: 0, y: 0, hw: 0, hh: 0, rotation: 0 };
   private readonly pts: Vec2[] = [0, 1, 2, 3].map(() => ({ x: 0, y: 0 }));
   private readonly w: Vec2[] = [0, 1, 2, 3].map(() => ({ x: 0, y: 0 }));
   private readonly tmp: Vec2 = { x: 0, y: 0 };
@@ -71,11 +121,21 @@ export class BattleView {
     private readonly scene: Phaser.Scene,
     private readonly world: World,
   ) {
-    this.boxGfx = scene.add.graphics();
-    this.bulletGfx = scene.add.graphics();
-    this.soulGfx = scene.add.graphics();
-    this.overlayGfx = scene.add.graphics();
-    this.hudGfx = scene.add.graphics();
+    // Draw order = depth: box, walls, ghosts, props, glows, bullets, shines, soul (+ trail), overlay, HUD.
+    this.looks = new LookCache(scene);
+    this.boxGfx = scene.add.graphics().setDepth(0);
+    this.walls = new SpriteLayer(scene, 1);
+    this.ghostGlows = new SpriteLayer(scene, 2);
+    this.ghostSprites = new SpriteLayer(scene, 3);
+    this.propSprites = new SpriteLayer(scene, 4);
+    this.glowSprites = new SpriteLayer(scene, 5);
+    this.bulletSprites = new SpriteLayer(scene, 6);
+    this.shineSprites = new SpriteLayer(scene, 7);
+    this.soulSprites = new SpriteLayer(scene, 8);
+    this.overlayGfx = scene.add.graphics().setDepth(9);
+    this.hudGfx = scene.add.graphics().setDepth(10);
+    this.layers = [this.walls, this.ghostGlows, this.ghostSprites, this.propSprites, this.glowSprites, this.bulletSprites, this.shineSprites, this.soulSprites];
+    scene.events.once('shutdown', () => this.looks.clear());
     // Bullets are not clipped to the box: attacks are seen arriving from off screen.
     world.pool.onDespawn = (b) => this.addGhost(b);
   }
@@ -135,40 +195,31 @@ export class BattleView {
     g.closePath();
   }
 
-  /** Fill a bullet: every primitive of its exact shape (bulletPrimitives, the same ones collision uses). */
-  private fillBullet(g: Phaser.GameObjects.Graphics, b: Bullet, alpha: number): void {
+  /**
+   * Draw one bullet (already interpolated) as a sprite of its cached look, plus its glow sprite
+   * (decorative, never part of the hitbox: CLAUDE.md). Position/rotation follow the drawn box frame;
+   * the bullet's scale (spawn pop, grow-in) and circle size buckets are sprite scale.
+   */
+  private drawBullet(core: SpriteLayer, glowLayer: SpriteLayer, b: Bullet, alpha: number): void {
+    const box = this.frame;
+    const p = box.toWorld(b, this.tmp);
+    const rot = box.rotation + b.rotation;
     const color = this.colorOf(b);
-    if (b.glow) this.drawGlow(g, b, color, alpha);
-    g.fillStyle(color, alpha);
-    bulletPrimitives(b, (p) => {
-      const n = this.primWorld(p);
-      if (n === 0) g.fillCircle(this.tmp.x, this.tmp.y, this.c.r);
-      else {
-        this.path(g, n);
-        g.fillPath();
-      }
-    });
+    const s = b.scale;
+    if (b.glow) {
+      const g = this.looks.glow(b);
+      glowLayer.next(g).setPosition(p.x, p.y).setRotation(rot).setScale(s / g.k).setTint(color).setAlpha(theme.glowAlpha * alpha);
+    }
+    const look = this.looks.bullet(b);
+    const k = b.shape === 'circle' ? (s * b.a) / look.size : s;
+    const img = core.next(look).setPosition(p.x, p.y).setRotation(rot).setScale(k / look.k).setTint(color);
+    if (alpha < 1) img.setAlpha(alpha);
   }
 
-  /**
-   * Decorative glow (light rays): faint, wider rects around each rect part. Never collides; the
-   * solid core drawn on top is the hitbox (CLAUDE.md: glows are decorative).
-   */
-  private drawGlow(g: Phaser.GameObjects.Graphics, b: Bullet, color: number, alpha: number): void {
-    const r = this.gr;
-    bulletPrimitives(b, (p) => {
-      if (p.kind !== 'rect') return;
-      for (const [pad, k] of GLOW_LAYERS) {
-        r.x = p.r.x; r.y = p.r.y; r.rotation = p.r.rotation;
-        r.hw = p.r.hw + pad;
-        r.hh = p.r.hh + pad;
-        rectCorners(r, this.pts);
-        for (let i = 0; i < 4; i++) this.frame.toWorld(this.pts[i]!, this.w[i]);
-        g.fillStyle(color, theme.glowAlpha * k * alpha);
-        this.path(g, 4);
-        g.fillPath();
-      }
-    });
+  /** A disc sprite (soul, trail, shine fill) of radius r at world (x, y). */
+  private disc(layer: SpriteLayer, x: number, y: number, r: number, color: number, alpha: number): void {
+    const look = this.looks.disc(this.world.soul.hitRadius);
+    layer.next(look).setPosition(x, y).setScale(r / look.size / look.k).setTint(color).setAlpha(alpha);
   }
 
   /**
@@ -195,22 +246,29 @@ export class BattleView {
     g.fillStyle(theme.boxFill, 1);
     this.path(g, 4);
     g.fillPath();
-    // Walls: safe = thin white; damaging = thick lime (normal) or magenta (KR). Never red.
+    // Textures follow the render resolution (quality setting, devicePixelRatio, window size).
+    if (this.looks.sync(renderScale())) for (const l of this.layers) l.reset();
+    for (const l of this.layers) l.begin();
+
+    // Walls: safe = thin white; damaging = thick lime (normal) or magenta (KR). Never red. Cached
+    // line looks stretched along each wall (anti-aliased long edges at any rotation).
     for (const [wall, a, b] of WALL_EDGES) {
       const ws = this.world.box.walls[wall];
       const p0 = this.w[a]!;
       const p1 = this.w[b]!;
-      if (ws.damaging) {
-        g.lineStyle(line.danger, ws.type === 'kr' ? theme.kr : theme.wallDamaging, 1);
-      } else {
-        g.lineStyle(line.box, theme.boxBorder, 1);
-      }
-      g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+      const width = ws.damaging ? line.danger : line.box;
+      const color = ws.damaging ? (ws.type === 'kr' ? theme.kr : theme.wallDamaging) : theme.boxBorder;
+      const look = this.looks.line(width);
+      const len = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+      this.walls
+        .next(look)
+        .setPosition((p0.x + p1.x) / 2, (p0.y + p1.y) / 2)
+        .setRotation(Math.atan2(p1.y - p0.y, p1.x - p0.x))
+        .setScale(len / look.size, 1 / look.k)
+        .setTint(color);
     }
 
-    // Bullets, plus fast-fading despawn ghosts.
-    const bg = this.bulletGfx;
-    bg.clear();
+    // Fast-fading despawn ghosts (visual only).
     for (const gh of this.ghosts) {
       if (!gh.live) continue;
       gh.t += realDt;
@@ -218,46 +276,36 @@ export class BattleView {
         gh.live = false;
         continue;
       }
-      this.fillBullet(bg, gh.b, 0.6 * (1 - gh.t / DESPAWN_FADE_TIME));
+      this.drawBullet(this.ghostSprites, this.ghostGlows, gh.b, 0.6 * (1 - gh.t / DESPAWN_FADE_TIME));
     }
     // Props (non-damaging): translucent fill + thin outline so they never read as solid hazards.
     for (const p of this.world.props) {
-      const k = (2 * Math.PI) / 3;
-      for (let i = 0; i < 3; i++) {
-        this.tmp2.x = p.x + Math.cos(p.rotation + i * k) * p.r;
-        this.tmp2.y = p.y + Math.sin(p.rotation + i * k) * p.r;
-        box.toWorld(this.tmp2, this.w[i]);
-      }
-      bg.fillStyle(p.color, theme.propFillAlpha);
-      this.path(bg, 3);
-      bg.fillPath();
-      bg.lineStyle(1.5, p.color, 0.9);
-      this.path(bg, 3);
-      bg.strokePath();
+      const look = this.looks.prop(p.r, theme.propFillAlpha, 1.5, 0.9);
+      const wpos = box.toWorld(p, this.tmp);
+      this.propSprites.next(look).setPosition(wpos.x, wpos.y).setRotation(box.rotation + p.rotation).setScale(1 / look.k).setTint(p.color);
     }
     for (const b of pool.all) {
       if (!b.active) continue;
       const ib = interpBullet(b, t, this.ib);
-      this.fillBullet(bg, ib, 1);
-      // Shine: the gold -> active moment (gameplay cue; see effects.drawShine).
+      this.drawBullet(this.bulletSprites, this.glowSprites, ib, 1);
+      // Shine: the gold -> active moment (gameplay cue; see effects.shineShape).
       const s = b.armAt > 0 ? sinceArmed(b) : -1;
       if (s >= 0 && s < SHINE_TIME) {
-        const c = box.toWorld(ib, this.tmp);
-        drawShine(bg, c.x, c.y, bulletExtent(b), s / SHINE_TIME, theme.shine);
+        const c = box.toWorld(ib, this.tmp2);
+        const sh = shineShape(bulletExtent(b), s / SHINE_TIME);
+        this.disc(this.shineSprites, c.x, c.y, sh.fillR, theme.shine, sh.fillAlpha);
+        const ring = this.looks.ring(Math.round(sh.ringR * 2) / 2, sh.ringWidth);
+        this.shineSprites.next(ring).setPosition(c.x, c.y).setScale(1 / ring.k).setTint(theme.shine).setAlpha(sh.ringAlpha);
       }
     }
 
     // Soul: solid circle, drawn radius == hit radius. Blinks during i-frames.
-    const sg = this.soulGfx;
-    sg.clear();
     const sl = lerpPoint(soul.prev.x, soul.prev.y, soul.pos.x, soul.pos.y, t, this.tmp2);
-    this.drawTrail(sg, sl, t);
+    this.drawTrail(sl, t);
     const sw = box.toWorld(sl, this.tmp);
     const blinkOff = soul.invulnerable && Math.floor(soul.iframes / IFRAME_BLINK_PERIOD) % 2 === 0;
-    if (soul.alive && !blinkOff) {
-      sg.fillStyle(theme.soul, 1);
-      sg.fillCircle(sw.x, sw.y, soul.hitRadius);
-    }
+    if (soul.alive && !blinkOff) this.disc(this.soulSprites, sw.x, sw.y, soul.hitRadius, theme.soul, 1);
+    for (const l of this.layers) l.end();
 
     // Hit feedback: brief flash + small shake.
     if (this.world.lastHitStep !== this.lastHitSeen) {
@@ -277,7 +325,7 @@ export class BattleView {
    * Dash trail: a short row of translucent soul-colored circles from the dash start to the soul,
    * shrinking toward the start, fading out after the dash. Visual only.
    */
-  private drawTrail(g: Phaser.GameObjects.Graphics, soulLocal: Vec2, t: number): void {
+  private drawTrail(soulLocal: Vec2, t: number): void {
     const ab = this.world.ability;
     if (!(ab instanceof Dash)) return;
     // Age at the drawn moment (the sim is up to one step ahead).
@@ -292,8 +340,7 @@ export class BattleView {
       p.x = ab.from.x + (soulLocal.x - ab.from.x) * k;
       p.y = ab.from.y + (soulLocal.y - ab.from.y) * k;
       const w = this.frame.toWorld(p, this.w[0]);
-      g.fillStyle(theme.soul, 0.35 * fade * (0.3 + 0.7 * k));
-      g.fillCircle(w.x, w.y, r * (0.45 + 0.55 * k));
+      this.disc(this.soulSprites, w.x, w.y, r * (0.45 + 0.55 * k), theme.soul, 0.35 * fade * (0.3 + 0.7 * k));
     }
   }
 
