@@ -17,8 +17,7 @@ const INWARD: Record<Wall, [number, number]> = { left: [1, 0], right: [-1, 0], t
 
 /**
  * Rose: thorn volleys (the old Prism edge volleys, unchanged), vine lashes and blooms. Every
- * projectile is white. Volleys keep the old Prism's wall-phase windows (even phase slots); the
- * unlocked off-beat attacks take the odd slots (see rose.config.ts).
+ * projectile is white. Her phases cycle through only her unlocked attacks (see rose.config.ts).
  */
 export class Rose extends Character<RoseAttack, RoseRules> {
   readonly id = 'rose';
@@ -39,10 +38,9 @@ export class Rose extends Character<RoseAttack, RoseRules> {
     return this.config.rules;
   }
 
-  /** Phase slots at this level: volley on even slots, the unlocked off-beat attacks (or 'rest') on odd ones. */
+  /** Phase order at this level: only the unlocked attacks, each its own phase (no empty phases). */
   get order(): readonly RosePhase[] {
-    const off = this.rules.offBeat.filter((id) => id in this.resolved.attacks);
-    return off.length === 0 ? ['volley', 'rest'] : off.flatMap((id): RosePhase[] => ['volley', id]);
+    return this.rules.phaseOrder.filter((id) => id in this.resolved.attacks);
   }
 
   phaseAt(t: number): RosePhaseState {
@@ -82,6 +80,7 @@ export class Rose extends Character<RoseAttack, RoseRules> {
   }
 
   protected override update(): void {
+    if (this.order.length === 0) return;
     const st = this.phaseAt(this.clock);
     if (st.phase !== this.phase) {
       this.phase = st.phase;

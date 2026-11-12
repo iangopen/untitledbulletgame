@@ -203,11 +203,13 @@ describe('Rose behaviour (40 s at levels 1, 10, 20)', () => {
       const m = measure(level);
       // eslint-disable-next-line no-console
       console.log(`Rose L${level}: ${m.phases.join(' ')} | spawned ${JSON.stringify(m.spawned)} | entered the box ${JSON.stringify(m.arrived)} | max vines in the box at once ${m.maxVines} | narrowest vine gap ${Number.isFinite(m.narrowest) ? m.narrowest.toFixed(1) : '-'} px (soul diameter ${SOUL_RADIUS * 2}) | wrong phase ${m.wrongPhase}`);
+      // Only unlocked attacks, one phase each: never an empty phase.
       const want = level === 1
-        ? ['volley@0.0', 'breather@8.0', 'rest@9.0', 'breather@17.0', 'volley@18.0']
+        ? ['volley@0.0', 'breather@8.0', 'volley@9.0', 'breather@17.0', 'volley@18.0']
         : level === 10
           ? ['volley@0.0', 'breather@8.0', 'vine@9.0', 'breather@17.0', 'volley@18.0']
-          : ['volley@0.0', 'breather@8.0', 'vine@9.0', 'breather@17.0', 'volley@18.0', 'breather@26.0', 'bloom@27.0'];
+          : ['volley@0.0', 'breather@8.0', 'vine@9.0', 'breather@17.0', 'bloom@18.0', 'breather@26.0', 'volley@27.0'];
+      expect(m.phases.every((ph) => !ph.startsWith('rest'))).toBe(true);
       expect(m.phases.slice(0, want.length)).toEqual(want);
       expect(m.nonWhite).toBe(0);
       expect(m.onScreenSpawns).toBe(0);

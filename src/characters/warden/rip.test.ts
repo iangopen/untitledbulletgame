@@ -226,7 +226,10 @@ describe('The Warden rip at level 20', () => {
           seen.add(b);
           spawns++;
           if (aabbInBand(a)) spawnInBand++;
-          const child = (b.owner === 'prism' && b.gen > 0) || (b.owner === 'ulysses' && (b.flags & 4) !== 0);
+          // Prism's mirror beam (flag 2) follows the path laid by mirrors formed against the soul box
+          // (checked in prism.test.ts), so like refraction children it isn't checked for straight-line aim.
+          // Rose's bloom rings (flag 1) burst out of a rose formed against the soul box; half fly outward by design.
+          const child = (b.owner === 'prism' && (b.gen > 0 || (b.flags & 2) !== 0)) || (b.owner === 'ulysses' && (b.flags & 4) !== 0) || (b.owner === 'rose' && b.flags === 1);
           if (tossed && !child) {
             tossSpawns++;
             if (aimsAtSoulBox(w, b)) {
@@ -266,6 +269,12 @@ describe('The Warden rip at level 20', () => {
 /** Same test as the displaced-box check: the path (box-local, soul's box) crosses the soul's box, or it forms next to it. */
 function aimsAtSoulBox(w: World, b: Bullet): boolean {
   const hw = w.box.halfWidth, hh = w.box.halfHeight;
+  // Prism's laser (a long still bar from its emitter): does its axis cross the box?
+  if (b.shape === 'rect' && b.owner === 'prism') {
+    const c = Math.cos(b.rotation), s = Math.sin(b.rotation);
+    for (let t = -b.a; t <= b.a; t += 2) if (Math.abs(b.x + c * t) <= hw && Math.abs(b.y + s * t) <= hh) return true;
+    return false;
+  }
   if (b.vx === 0 && b.vy === 0) {
     const dx = Math.max(0, Math.abs(b.x) - hw), dy = Math.max(0, Math.abs(b.y) - hh);
     return Math.hypot(dx, dy) < 120;

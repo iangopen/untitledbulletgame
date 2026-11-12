@@ -3,8 +3,8 @@ import { px } from '../../tuning';
 import { makeForm, type CompositeForm, type Part } from '../../combat/composite';
 
 export type RoseAttack = 'volley' | 'vine' | 'bloom';
-/** 'rest' = a quiet phase slot (nothing arrives), kept so the volley windows match the old Prism's. */
-export type RosePhase = RoseAttack | 'rest';
+/** Rose's phases are her attacks (one phase per unlocked attack). */
+export type RosePhase = RoseAttack;
 
 export interface RoseRules {
   /** Seconds each phase lasts (arrivals at the box fall inside it). */
@@ -14,11 +14,10 @@ export interface RoseRules {
   /** Volley cooldowns are divided by this inside the volley phase (the old Prism wall phase rate). */
   phaseIntensity: number;
   /**
-   * Phase slots: volleys on every even slot (exactly the old Prism wall windows: 0-8, 18-26, ...),
-   * the unlocked off-beat attacks (`offBeat`, in order) on the odd slots; with none unlocked an odd
-   * slot is a quiet 'rest'. L1-5: volley, rest; L6-14: volley, vine; L15-20: volley, vine, volley, bloom.
+   * Phase order. Each attack is its own phase and only unlocked attacks take part (like Mortimer),
+   * so there is never an empty phase: L1-5 volley, volley, ...; L6-14 volley, vine; L15-20 volley, vine, bloom.
    */
-  offBeat: readonly RoseAttack[];
+  phaseOrder: readonly RoseAttack[];
   /** Thorn circumradius (px) and the constant distance between neighbouring volley thorns (px). */
   volleySize: number;
   volleySpacing: number;
@@ -85,7 +84,7 @@ export const roseConfig: CharacterConfig<RoseAttack, RoseRules> = {
     phaseLength: 8,
     breather: 1,
     phaseIntensity: 2,
-    offBeat: ['vine', 'bloom'],
+    phaseOrder: ['volley', 'vine', 'bloom'],
     volleySize: px(6),
     volleySpacing: px(22),
     vineThickness: px(4),

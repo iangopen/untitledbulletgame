@@ -7,7 +7,8 @@ import { registry, type CharacterEntry } from '../characters/registry';
 export type Roster = Readonly<Record<string, number>>;
 
 /** Default roster when nothing else is given. */
-export const DEFAULT_ROSTER: Roster = { prism: 1 };
+/** Default roster for a new player (no levels set or fought yet this session): Rose at 1. */
+export const DEFAULT_ROSTER: Roster = { rose: 1 };
 
 export function clampLevel(level: number, entry: CharacterEntry): number {
   if (!Number.isFinite(level)) return 0;

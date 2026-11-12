@@ -20,8 +20,8 @@ export interface GameEvents {
    * phase that follows (for a breather) or the current one.
    */
   prismPhaseChanged: { owner: string; phase: 'rest' | 'ray' | 'breather'; next: 'rest' | 'ray' };
-  /** Rose: phase slots (volley on even slots; vine / bloom, or 'rest', on odd ones). */
-  rosePhaseChanged: { owner: string; phase: 'volley' | 'vine' | 'bloom' | 'rest' | 'breather'; next: 'volley' | 'vine' | 'bloom' | 'rest' };
+  /** Rose: one phase per unlocked attack. */
+  rosePhaseChanged: { owner: string; phase: 'volley' | 'vine' | 'bloom' | 'breather'; next: 'volley' | 'vine' | 'bloom' };
   /** Mortimer's phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */
   mortimerPhaseChanged: { owner: string; phase: 'snowfall' | 'roll' | 'blizzard' | 'breather'; next: 'snowfall' | 'roll' | 'blizzard' };
   /** A resize was requested (target size after the min-size clamp). anchor = fixed wall or 'center'. */

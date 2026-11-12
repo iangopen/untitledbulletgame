@@ -242,13 +242,13 @@ describe('all four characters with a displaced box', () => {
         if (!seen.has(b)) {
           seen.add(b);
           spawns++;
-          if (aabbInBand(a)) {
-            spawnInBand++;
-            if (spawnInBand < 12) console.log('IN BAND', i, b.owner, b.shape, b.armed, b.age.toFixed(3), JSON.stringify(a), w.box.x.toFixed(0), w.box.y.toFixed(0), b.x.toFixed(0), b.y.toFixed(0), b.vx.toFixed(0), b.vy.toFixed(0));
-          }
+          if (aabbInBand(a)) spawnInBand++;
           // Children of a refraction or the prism combo continue a projectile wherever it went
           // (often already out of the box), so only attack spawns are checked for aim.
-          const child = (b.owner === 'prism' && b.gen > 0) || (b.owner === 'ulysses' && (b.flags & 4) !== 0);
+          // Prism's mirror beam (flag 2) follows the path laid by mirrors formed against the soul box
+          // (checked in prism.test.ts), so like refraction children it isn't checked for straight-line aim.
+          // Rose's bloom rings (flag 1) burst out of a rose formed against the soul box; half fly outward by design.
+          const child = (b.owner === 'prism' && (b.gen > 0 || (b.flags & 2) !== 0)) || (b.owner === 'ulysses' && (b.flags & 4) !== 0) || (b.owner === 'rose' && b.flags === 1);
           if (displaced && !child) {
             displacedSpawns++;
             if (aimsAtBox(w, b)) tracked++;
@@ -282,6 +282,12 @@ describe('all four characters with a displaced box', () => {
  */
 function aimsAtBox(w: World, b: Bullet): boolean {
   const hw = w.box.halfWidth, hh = w.box.halfHeight;
+  // Prism's laser (a long still bar from its emitter): does its axis cross the box?
+  if (b.shape === 'rect' && b.owner === 'prism') {
+    const c = Math.cos(b.rotation), s = Math.sin(b.rotation);
+    for (let t = -b.a; t <= b.a; t += 2) if (Math.abs(b.x + c * t) <= hw && Math.abs(b.y + s * t) <= hh) return true;
+    return false;
+  }
   if (b.vx === 0 && b.vy === 0) {
     const dx = Math.max(0, Math.abs(b.x) - hw), dy = Math.max(0, Math.abs(b.y) - hh);
     return Math.hypot(dx, dy) < 120;
