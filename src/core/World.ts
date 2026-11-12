@@ -223,25 +223,24 @@ export class World {
     this.snapshot();
     this.steps++;
     this.time += dt;
-    // 1. Box motion. The soul rides the box (box-local); bullets stay WORLD-fixed: wherever the box
-    // moves, turns or (anchored) resizes, each bullet keeps its world position, heading and velocity,
-    // so a shoved or spun box runs into attacks already in flight. Hooks that pin a bullet to the
-    // box (Ulysses' axe pivot, The Warden's fists) re-pin it in pool.update below.
+    // 1. Box motion. The soul and every bullet stay WORLD-fixed: wherever the box moves, turns,
+    // resizes or scales (a toss), the box slides under them. The soul keeps its world position and
+    // only a wall that actually reaches it moves it (the clamp below pushes it just inside). Bullets
+    // keep their world position, heading and velocity, so a shoved or spun box runs into attacks
+    // already in flight. Hooks that pin a bullet to the box (Ulysses' axe pivot, The Warden's fists)
+    // re-pin it in pool.update below.
     const ox = box.x, oy = box.y, orot = box.rotation;
+    const c0 = Math.cos(orot), s0 = Math.sin(orot);
+    const swx = ox + soul.pos.x * c0 - soul.pos.y * s0;
+    const swy = oy + soul.pos.x * s0 + soul.pos.y * c0;
     box.step(dt);
-    const sh = box.contentShift;
-    if (sh.x !== 0 || sh.y !== 0) {
-      soul.pos.x += sh.x;
-      soul.pos.y += sh.y;
+    if (box.x !== ox || box.y !== oy || box.rotation !== orot) {
+      const c1 = Math.cos(box.rotation), s1 = Math.sin(box.rotation);
+      const dx = swx - box.x, dy = swy - box.y;
+      soul.pos.x = dx * c1 + dy * s1;
+      soul.pos.y = -dx * s1 + dy * c1;
+      this.keepBulletsWorldFixed(ox, oy, orot);
     }
-    // A toss scales the box about its center: the soul scales with it (same relative spot, scaled
-    // radius and speed), so it stays inside. Bullets are world-fixed and keep their size.
-    if (box.contentScale !== 1) {
-      soul.pos.x *= box.contentScale;
-      soul.pos.y *= box.contentScale;
-    }
-    soul.scale = box.scale;
-    if (box.x !== ox || box.y !== oy || box.rotation !== orot) this.keepBulletsWorldFixed(ox, oy, orot);
     // Other boxes (split) move on their own tracks; bullets are not stored in their frames.
     const others = this.otherBoxes;
     for (const o of others) o.step(dt);

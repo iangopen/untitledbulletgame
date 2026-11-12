@@ -7,6 +7,7 @@ import { STEP } from '../../core/Clock';
 import { Director } from '../../director/Director';
 import { TimerMode } from '../../director/modes/TimerMode';
 import { registry } from '../registry';
+import { SOUL_RADIUS } from '../../tuning';
 import { aabbInBand, bulletWorldAabb, PLAY_BOTTOM, PLAY_TOP, rotatedHalfExtents } from '../../combat/bands';
 import { VIEW } from '../../render/theme';
 import type { Bullet } from '../../combat/Bullet';
@@ -185,7 +186,8 @@ describe('The Warden behaviour', () => {
     expect(c.tossLog.length).toBeGreaterThanOrEqual(2);
     expect(landed).toBe(c.tossLog.length);
     for (const t of c.tossLog) {
-      expect(t.minScale).toBeLessThan(0.6);
+      expect(t.minScale).toBeGreaterThan(0.78);
+      expect(t.minScale).toBeLessThan(0.82);
       expect(t.turned / (2 * Math.PI)).toBeGreaterThanOrEqual(2 - 1e-6);
     }
     expect(bad).toBe(0);
@@ -193,7 +195,7 @@ describe('The Warden behaviour', () => {
   });
 });
 
-describe('bullets stay world-fixed while the box moves; the soul rides it', () => {
+describe('bullets and the soul stay world-fixed while the box moves', () => {
   it('moveTo and rotateTo leave a bullet where it was in the world, heading the same way', () => {
     const w = new World(640, 369);
     const b = w.pool.spawn({ shape: 'circle', a: 5, x: -300, y: 0, vx: 0, vy: 0, damage: 1, noPop: true })!;
@@ -205,8 +207,10 @@ describe('bullets stay world-fixed while the box moves; the soul rides it', () =
     const now = w.box.toWorld(b);
     expect(now.x).toBeCloseTo(start.x, 6);
     expect(now.y).toBeCloseTo(start.y, 6);
+    // The soul (at the center) stays where it was in the world: the box slid 200 px under it.
     const soul1 = w.box.toWorld(w.soul.pos);
-    expect(soul1.x - soul0.x).toBeCloseTo(200, 6);
+    expect(soul1.x).toBeCloseTo(soul0.x, 6);
+    expect(soul1.y).toBeCloseTo(soul0.y, 6);
     // A moving bullet keeps its world velocity through a turn.
     const m = w.pool.spawn({ shape: 'circle', a: 5, x: 0, y: -300, vx: 100, vy: 0, damage: 1, noPop: true })!;
     const p0 = w.box.toWorld(m);
@@ -292,25 +296,33 @@ function aimsAtBox(w: World, b: Bullet): boolean {
 }
 
 describe('The Warden toss', () => {
-  it('ends upright (a whole number of turns) at full size, reversals included', () => {
+  it('ends upright at full size; the soul never changes size, stays inside every step, and a centered soul never moves', () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
-      const w = new World(640, 369);
-      const c = new Warden(w, seed);
-      c.fireNow('toss', 20);
-      w.soul.pos.x = 150;
-      w.soul.pos.y = -80;
-      for (let i = 0; i < 60 * 5; i++) {
-        c.tick(STEP);
-        w.step(STILL, STEP);
-        const { hx, hy } = { hx: w.box.halfWidth - w.soul.hitRadius + 1e-9, hy: w.box.halfHeight - w.soul.hitRadius + 1e-9 };
-        expect(Math.abs(w.soul.pos.x) <= hx && Math.abs(w.soul.pos.y) <= hy).toBe(true);
+      for (const start of [{ x: 0, y: 0 }, { x: 150, y: -80 }, { x: -216, y: 156 }]) {
+        const w = new World(640, 369);
+        const c = new Warden(w, seed);
+        c.fireNow('toss', 20);
+        w.soul.pos.x = start.x;
+        w.soul.pos.y = start.y;
+        const w0 = w.box.toWorld(w.soul.pos);
+        let moved = 0;
+        for (let i = 0; i < 60 * 5; i++) {
+          c.tick(STEP);
+          w.step(STILL, STEP);
+          expect(w.soul.hitRadius).toBe(SOUL_RADIUS);
+          const hx = w.box.halfWidth - w.soul.hitRadius + 1e-9, hy = w.box.halfHeight - w.soul.hitRadius + 1e-9;
+          expect(Math.abs(w.soul.pos.x) <= hx && Math.abs(w.soul.pos.y) <= hy).toBe(true);
+          const p = w.box.toWorld(w.soul.pos);
+          moved = Math.max(moved, Math.hypot(p.x - w0.x, p.y - w0.y));
+        }
+        expect(c.tossLog.length, `seed ${seed}`).toBe(1);
+        expect(w.box.scale).toBe(1);
+        expect(w.box.rotation).toBeCloseTo(0, 9);
+        // A soul in the middle is never reached by a wall: it does not move at all.
+        if (start.x === 0) expect(moved).toBeLessThan(1e-9);
+        // One in a corner is pushed in by the walls that reach it.
+        if (start.x === -216) expect(moved).toBeGreaterThan(10);
       }
-      expect(c.tossLog.length, `seed ${seed}`).toBe(1);
-      expect(w.box.scale).toBe(1);
-      expect(w.box.rotation).toBeCloseTo(0, 9);
-      // The soul's relative spot survived the toss.
-      expect(w.soul.pos.x).toBeCloseTo(150, 6);
-      expect(w.soul.pos.y).toBeCloseTo(-80, 6);
     }
   });
 
@@ -329,5 +341,39 @@ describe('The Warden toss', () => {
     w2.box.scaleTo(0.6, 0.3);
     w2.step(STILL, STEP);
     expect(w2.splitBox()).toBeNull();
+  });
+});
+
+describe('the box slides under the soul', () => {
+  it('a still soul in the middle keeps its world position through a punch (until a wall reaches it) and a toss', () => {
+    const fmt = (p: { x: number; y: number }) => `(${p.x.toFixed(1)}, ${p.y.toFixed(1)})`;
+    for (const atk of ['punch', 'toss'] as const) {
+      const w = new World(640, 369);
+      const c = new Warden(w, 3);
+      c.fireNow(atk, 20);
+      const log: string[] = [];
+      const before = w.box.toWorld(w.soul.pos);
+      log.push(`before ${fmt(before)}`);
+      let pushed = 0;
+      for (let i = 1; i <= 60 * 5; i++) {
+        c.tick(STEP);
+        const wall = Math.min(w.box.distanceToWall(w.soul.pos, 'left'), w.box.distanceToWall(w.soul.pos, 'right'), w.box.distanceToWall(w.soul.pos, 'top'), w.box.distanceToWall(w.soul.pos, 'bottom'));
+        const prev = w.box.toWorld(w.soul.pos);
+        w.step(STILL, STEP);
+        const now = w.box.toWorld(w.soul.pos);
+        const d = Math.hypot(now.x - prev.x, now.y - prev.y);
+        // It only moves when a wall has reached it (it was touching a wall before or after this step).
+        if (d > 1e-9) {
+          pushed++;
+          const after = Math.min(w.box.distanceToWall(w.soul.pos, 'left'), w.box.distanceToWall(w.soul.pos, 'right'), w.box.distanceToWall(w.soul.pos, 'top'), w.box.distanceToWall(w.soul.pos, 'bottom'));
+          expect(Math.min(wall, after)).toBeLessThanOrEqual(w.soul.hitRadius + 1e-6);
+        }
+        if (i % 30 === 0) log.push(`${(i / 60).toFixed(1)}s ${fmt(now)} box (${w.box.x.toFixed(0)}, ${w.box.y.toFixed(0)}) x${w.box.scale.toFixed(2)} ${w.box.rotation.toFixed(2)} rad`);
+        expect(w.soul.hitRadius).toBe(SOUL_RADIUS);
+      }
+      // eslint-disable-next-line no-console
+      console.log(`soul world position, ${atk} at L20 (soul still, starting in the middle): ${log.join(' | ')} | steps a wall pushed it: ${pushed}`);
+      if (atk === 'toss') expect(pushed).toBe(0);
+    }
   });
 });

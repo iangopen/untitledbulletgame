@@ -71,11 +71,11 @@ export class Box {
   private scl: Track | null = null;
   /**
    * Toss scale (1 = on the ground). The box's real size is width x height; scaling multiplies both
-   * (and any running resize). The soul's box-local position and radius scale with it (World), so it
-   * stays inside at the same relative spot. Bullets are world-fixed and keep their size.
+   * (and any running resize) about the center. The soul and bullets stay world-fixed and never
+   * change size; the shrinking walls push the soul inward only where they reach it.
    */
   scale = 1;
-  /** Factor the size changed by through scaling this step (1 = none). World scales the soul by it. */
+  /** Factor the size changed by through scaling this step (1 = none; diagnostics). */
   contentScale = 1;
   /**
    * Local-space shift (this step) that contents must apply to stay world-fixed when an anchored
@@ -205,8 +205,8 @@ export class Box {
   }
 
   /**
-   * Scale the box (and everything that rides it: the soul's position and radius) to `scale` x its
-   * unscaled size, about its center. Not clamped to the minimum size (a toss is a view change).
+   * Scale the box to `scale` x its unscaled size, about its center (the soul is not scaled or moved;
+   * walls push it if they reach it). Not clamped to the minimum size.
    */
   scaleTo(scale: number, duration = 0, ease: Easing = 'quadOut'): void {
     const s = Math.max(0.05, scale);

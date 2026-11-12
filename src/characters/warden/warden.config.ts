@@ -45,7 +45,7 @@ export interface WardenRules {
  *         the halves, clamped to the room on screen), hold s (time split), either (chance the merge
  *         punch hits the right box instead of the left), back s (merge to re-center punch)
  *  toss:  cooldown s, windup s (hands; lower = harder), height (scale while airborne; lower = higher
- *         toss = harder; clamped so a full turn fits on screen), speed rad/s (spin), turns (whole
+ *         toss = harder; about 0.8; clamped by safeSpinScale so a full turn fits on screen and clear of the HUD bands), speed rad/s (spin), turns (whole
  *         turns while airborne, rounded), reverse (chance the spin turns back part way, 2+ turns)
  */
 export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
@@ -64,7 +64,7 @@ export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
       to: 14,
       attacks: {
         punch: { cooldown: [3.0, 2.3], windup: [0.75, 0.55], distance: [px(110), px(170)], back: [1.3, 0.9], vertical: [0.1, 0.3] },
-        toss: { cooldown: [7.0, 7.0], windup: [0.8, 0.65], height: [0.8, 0.68], speed: [3.2, 4.6], turns: [1, 2], reverse: [0, 0.3] },
+        toss: { cooldown: [7.0, 7.0], windup: [0.8, 0.65], height: [0.86, 0.83], speed: [3.2, 4.6], turns: [1, 2], reverse: [0, 0.3] },
       },
     },
     {
@@ -72,7 +72,7 @@ export const wardenConfig: CharacterConfig<WardenAttack, WardenRules> = {
       to: 20,
       attacks: {
         punch: { cooldown: [2.2, 1.6], windup: [0.55, 0.4], distance: [px(170), px(230)], back: [0.9, 0.6], vertical: [0.3, 0.5] },
-        toss: { cooldown: [7.0, 7.0], windup: [0.65, 0.5], height: [0.66, 0.5], speed: [4.8, 6.4], turns: [2, 3], reverse: [0.3, 0.5] },
+        toss: { cooldown: [7.0, 7.0], windup: [0.65, 0.5], height: [0.82, 0.8], speed: [4.8, 6.4], turns: [2, 3], reverse: [0.3, 0.5] },
         rip: { cooldown: [7.5, 7.0], windup: [0.7, 0.5], gap: [px(70), px(120)], hold: [2.5, 3.5], either: [0, 0.5], back: [0.9, 0.6] },
       },
     },

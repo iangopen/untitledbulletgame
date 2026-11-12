@@ -45,8 +45,8 @@ export class Dash extends CooldownAbility {
     const t = Math.min(dt, this.left);
     this.left -= t;
     if (this.left < 1e-9) this.left = 0;
+    const speed = DASH_DISTANCE / DASH_DURATION;
     const { soul, box } = world;
-    const speed = (DASH_DISTANCE / DASH_DURATION) * soul.scale;
     soul.pos.x += this.dir.x * speed * t;
     soul.pos.y += this.dir.y * speed * t;
     box.clampLocal(soul.pos, soul.hitRadius);

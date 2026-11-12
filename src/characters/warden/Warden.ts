@@ -341,7 +341,7 @@ export class Warden extends Character<WardenAttack, WardenRules> {
   }
 
   // --- Toss (6+): hands grab the box and toss it up. Top-down, so it shrinks as it rises
-  // (Box.scaleTo; the soul scales with it), spins whole turns while small, and lands back at full
+  // (Box.scaleTo; only the box shrinks, the soul keeps its world position and size), spins whole turns while small, and lands back at full
   // size with a heavy shake (boxLanded). Never while split. ---
 
   private spinTime(p: ResolvedAttack): number {

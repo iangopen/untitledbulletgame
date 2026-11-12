@@ -226,40 +226,36 @@ describe('Bullet wall hooks in a moving box', () => {
 });
 
 describe('Box.scaleTo (toss)', () => {
-  it('scales size about the center; the soul keeps its relative spot, scales its radius and stays inside', () => {
+  it('scales size about the center; the soul keeps its world position, size and speed, and stays inside', () => {
     const w = new World(640, 369);
-    w.soul.pos.x = 200;
-    w.soul.pos.y = -150;
-    const rel = { x: w.soul.pos.x / w.box.halfWidth, y: w.soul.pos.y / w.box.halfHeight };
-    w.box.scaleTo(0.5, 0.4, 'quadOut');
+    w.soul.pos.x = 60;
+    w.soul.pos.y = -40;
+    const world0 = w.box.toWorld(w.soul.pos);
+    w.box.scaleTo(0.8, 0.4, 'quadOut');
     for (let i = 0; i < 30; i++) {
       w.step({ dx: 0, dy: 0, slow: false }, STEP);
       expect(Math.abs(w.soul.pos.x)).toBeLessThanOrEqual(w.box.halfWidth - w.soul.hitRadius + 1e-9);
       expect(Math.abs(w.soul.pos.y)).toBeLessThanOrEqual(w.box.halfHeight - w.soul.hitRadius + 1e-9);
+      const p = w.box.toWorld(w.soul.pos);
+      expect(p.x).toBeCloseTo(world0.x, 9);
+      expect(p.y).toBeCloseTo(world0.y, 9);
+      expect(w.soul.hitRadius).toBe(SOUL_RADIUS);
     }
-    expect(w.box.scale).toBeCloseTo(0.5, 9);
-    expect(w.box.width).toBeCloseTo(225, 9);
-    expect(w.box.height).toBeCloseTo(165, 9);
+    expect(w.box.scale).toBeCloseTo(0.8, 9);
+    expect(w.box.width).toBeCloseTo(360, 9);
+    expect(w.box.height).toBeCloseTo(264, 9);
     expect(w.box.x).toBe(640);
-    expect(w.soul.hitRadius).toBeCloseTo(SOUL_RADIUS * 0.5, 9);
-    expect(w.soul.pos.x / w.box.halfWidth).toBeCloseTo(rel.x, 9);
-    expect(w.soul.pos.y / w.box.halfHeight).toBeCloseTo(rel.y, 9);
-    // Movement scales too: one second right covers the same fraction of the box.
+    // Speed unchanged: half a second right covers SOUL_SPEED / 2.
     w.soul.pos.x = 0;
     for (let i = 0; i < 30; i++) w.step({ dx: 1, dy: 0, slow: false }, STEP);
-    expect(w.soul.pos.x).toBeCloseTo(SOUL_SPEED * 0.5 * 0.5, 6);
-    w.box.scaleTo(1, 0.3);
-    for (let i = 0; i < 20; i++) w.step({ dx: 0, dy: 0, slow: false }, STEP);
-    expect(w.box.width).toBeCloseTo(450, 9);
-    expect(w.soul.hitRadius).toBeCloseTo(SOUL_RADIUS, 9);
+    expect(w.soul.pos.x).toBeCloseTo(SOUL_SPEED * 0.5, 6);
   });
 
-  it('hitboxes: the scaled soul is hit by a bullet at its scaled radius, not its full one', () => {
+  it('hitboxes: the soul is hit at its full radius while the box is scaled', () => {
     const w = new World(640, 369);
-    w.box.scaleTo(0.5);
+    w.box.scaleTo(0.8);
     w.step({ dx: 0, dy: 0, slow: false }, STEP);
-    const r = SOUL_RADIUS * 0.5;
-    // A still bullet just outside the scaled radius misses; just inside hits.
+    const r = SOUL_RADIUS;
     const miss = w.pool.spawn({ shape: 'circle', a: 5, x: r + 5 + 0.5, y: 0, damage: 10, noPop: true })!;
     w.step({ dx: 0, dy: 0, slow: false }, STEP);
     expect(w.soul.hp).toBe(w.soul.maxHp);

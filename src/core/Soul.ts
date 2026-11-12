@@ -37,17 +37,13 @@ export type DamageResult = 'applied' | 'blocked' | 'dead';
  *  - KR hits respect and grant i-frames, same as normal hits.
  */
 export class Soul {
-  /** Box-local position (DEFAULT, Ian may change): the soul rides with the box when it moves or rotates. */
+  /** Box-local position. The soul stays where it is in the WORLD when its box moves, turns or scales (World.step); only walls that reach it push it. */
   readonly pos: Vec2 = { x: 0, y: 0 };
   /** Position at the start of the current step. Drawing only (render interpolation); logic never reads it. */
   readonly prev: Vec2 = { x: 0, y: 0 };
   private readonly dir: Vec2 = { x: 0, y: 0 };
-  /** The soul's box's toss scale (World sets it each step); radius and speed scale with it. */
-  scale = 1;
-  /** Drawn radius == collision radius (scaled with a tossed box). */
-  get hitRadius(): number {
-    return SOUL_RADIUS * this.scale;
-  }
+  /** Drawn radius == collision radius. Never changes (a tossed box does not resize the soul). */
+  readonly hitRadius = SOUL_RADIUS;
   hp = MAX_HP;
   readonly maxHp = MAX_HP;
   /** HP still owed to KR poison. */
@@ -85,7 +81,7 @@ export class Soul {
       dy *= Math.SQRT1_2;
     }
     const d = box.dirToLocal({ x: dx, y: dy }, this.dir);
-    const speed = SOUL_SPEED * this.scale * (input.slow ? SLOW_MULTIPLIER : 1);
+    const speed = SOUL_SPEED * (input.slow ? SLOW_MULTIPLIER : 1);
     this.pos.x += d.x * speed * dt;
     this.pos.y += d.y * speed * dt;
     box.clampLocal(this.pos, this.hitRadius);
