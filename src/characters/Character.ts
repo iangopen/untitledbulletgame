@@ -1,6 +1,25 @@
 import type { World } from '../core/World';
 import { mulberry32 } from '../core/rng';
 import { resolveLevel, type CharacterConfig, type ResolvedAttack, type ResolvedLevel } from './config';
+import type { BulletShape } from '../combat/Bullet';
+import type { CompositeForm } from '../combat/composite';
+
+/**
+ * One look a character can draw at its current level, for texture prewarming (pure data; the
+ * renderer rasterises each before the battle starts). `radii` lists every circle radius a growing
+ * bullet passes through; `prop` = a triangle prop of that radius; `shine` = it shines when it arms.
+ */
+export interface LookSpec {
+  shape?: BulletShape;
+  a?: number;
+  b?: number;
+  form?: CompositeForm | null;
+  radii?: number[];
+  glow?: boolean;
+  shine?: boolean;
+  decor?: boolean;
+  prop?: number;
+}
 
 /**
  * When an attack's first shot reaches the box after it becomes active (s), staggered per attack.
@@ -29,6 +48,8 @@ export interface CharacterHandle {
   setLevel(level: number): void;
   tick(dt: number): void;
   dispose(): void;
+  /** Every bullet look this character can produce at its current level (texture prewarm). */
+  lookSpecs?(): LookSpec[];
 }
 
 interface Pending {
@@ -220,4 +241,7 @@ export abstract class Character<A extends string = string, R = Record<string, nu
   protected onLevelChanged(_prev: ResolvedLevel<A>): void {}
   /** Remove anything this character placed in the world. */
   dispose(): void {}
+  lookSpecs(): LookSpec[] {
+    return [];
+  }
 }

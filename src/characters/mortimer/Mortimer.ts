@@ -6,7 +6,8 @@ import { line, lineOffset, lineSlots, type BulletStyle } from '../../combat/patt
 import { maxOffscreenDistance } from '../../combat/offscreen';
 import { curvedStreak, makeForm, type CompositeForm } from '../../combat/composite';
 import { theme } from '../../render/theme';
-import { mortimerConfig, type MortimerAttack, type MortimerRules } from './mortimer.config';
+import { mortimerConfig, snowflakeForm, type MortimerAttack, type MortimerRules } from './mortimer.config';
+import type { LookSpec } from '../Character';
 
 export type MortimerPhaseState = PhaseState<MortimerAttack>;
 
@@ -65,10 +66,28 @@ export class Mortimer extends Character<MortimerAttack, MortimerRules> {
   /** Bullet style per attack. Every projectile is blue. */
   private style(id: MortimerAttack, p: ResolvedAttack): BulletStyle {
     const base = { damage: p.damage!, owner: this.id, kind: 'blue' as const, noPop: true };
-    if (id === 'snowfall') return { ...base, shape: 'circle', a: this.rules.flakeSize, onStep: this.swayHook(p.sway!) };
+    // A six-armed snowflake (composite; drawn == hitbox) turning slowly as it drifts.
+    if (id === 'snowfall') return { ...base, shape: 'composite', form: snowflakeForm(this.rules.flakeSize), a: 0, spin: this.rules.flakeSpin, onStep: this.swayHook(p.sway!) };
     if (id === 'roll') return { ...base, shape: 'circle', a: p.size!, onStep: this.growHook(p.growth!) };
     // A wind gust: a thin curved streak (composite of short pieces along the curve; drawn == hitbox).
     return { ...base, shape: 'composite', form: this.gustForm(p.length!), a: 0, faceVelocity: true };
+  }
+
+  /** Every look at this level: flakes, gusts, and each circle size a growing snowball passes through. */
+  override lookSpecs(): LookSpec[] {
+    const out: LookSpec[] = [];
+    const at = this.resolved.attacks;
+    if (at.snowfall) out.push({ shape: 'composite', form: snowflakeForm(this.rules.flakeSize) });
+    if (at.blizzard) out.push({ shape: 'composite', form: this.gustForm(at.blizzard.length!) });
+    if (at.roll) {
+      // Growth until it is gone: at most the far-cull distance at its speed.
+      const p = at.roll;
+      const maxR = p.size! + p.growth! * (2400 / p.speed!);
+      const radii: number[] = [];
+      for (let r = p.size!; r <= maxR * 1.16; r *= 1.05) radii.push(r);
+      out.push({ shape: 'circle', radii });
+    }
+    return out;
   }
 
   private readonly gustForms = new Map<number, CompositeForm>();

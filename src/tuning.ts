@@ -64,8 +64,10 @@ export const SCREEN_WIDTH = 1280;
 export const SCREEN_HEIGHT = 720;
 /** Extra distance past the screen edge (beyond the bullet's own size) for off-screen spawns. */
 export const OFFSCREEN_PAD = px(4);
-/** Spawn scale-pop duration (s). Draw AND hitbox scale together during it. */
-export const SPAWN_POP_TIME = 0.08;
+/** Seconds a new (on-screen) bullet takes to fade in at full size. Visual only. */
+export const SPAWN_FADE_TIME = 0.1;
+/** Longest fade-in of a forming (gold, growIn) bullet; shorter gold times fade over the whole gold time. */
+export const GOLD_FADE_TIME = 0.4;
 /** Shine at the pre-active -> active moment (s): a gameplay cue, drawn whatever the flash setting. */
 export const SHINE_TIME = 0.12;
 /** Despawn fade duration (s). Visual-only ghost; no collision. */

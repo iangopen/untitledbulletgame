@@ -370,12 +370,13 @@ describe('Prism behaviour', () => {
     const p = new Prism(w);
     p.setLevel(20);
     run(w, p, 10); // into the ray phase
-    const prop = p.prop!;
-    prop.x = 0; prop.y = 0; prop.rotation = 0;
+    // The prism is world-fixed beside the box (it steps aside if the box covers it): put it left of the box.
+    const px0 = -w.box.halfWidth - 60;
+    (p as unknown as { propWorld: { x: number; y: number; rotation: number } }).propWorld = { x: w.box.x + px0, y: w.box.y, rotation: 0 };
     const log = record(w.bus);
     // fire one beam by hand straight through the prism
     w.pool.clear();
-    (p as unknown as { spawnBeam: (...a: unknown[]) => void }).spawnBeam(-140, 0, 0, 200, resolveLevel(prismConfig, 20).attacks.beam, 0, 0, false);
+    (p as unknown as { spawnBeam: (...a: unknown[]) => void }).spawnBeam(px0 - 140, 0, 0, 200, resolveLevel(prismConfig, 20).attacks.beam, 0, 0, false);
     for (let i = 0; i < 60; i++) {
       (p as unknown as { update: () => void }).update();
       w.pool.update(STEP, w.box);

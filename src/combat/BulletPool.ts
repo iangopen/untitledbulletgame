@@ -3,7 +3,8 @@ import { BULLET_CAPACITY, FAR_CULL_DISTANCE, SCREEN_HEIGHT, SCREEN_WIDTH } from 
 import type { Vec2 } from '../core/Box';
 import { Bullet, bulletExtent, type BulletContext, type BulletSpec, type Wall } from './Bullet';
 
-export type DespawnReason = 'lifetime' | 'offbox' | 'wall' | 'cleared';
+/** 'cancel' = removed before it was ever meant to be seen (no despawn fade). */
+export type DespawnReason = 'lifetime' | 'offbox' | 'wall' | 'cleared' | 'cancel';
 
 /**
  * Fixed-capacity bullet storage. All Bullet objects are allocated up front;

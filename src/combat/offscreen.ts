@@ -57,11 +57,17 @@ export function edgeOffscreenOffset(box: Box, edge: Wall, extent: number): numbe
   const hw = box.halfWidth;
   const hh = box.halfHeight;
   const m = offscreenMargin(extent);
-  const corners: [number, number][] =
-    edge === 'left' || edge === 'right'
-      ? [[n.x * hw, -hh], [n.x * hw, hh]]
-      : [[-hw, n.y * hh], [hw, n.y * hh]];
-  return Math.max(...corners.map(([x, y]) => exitDistance(box, x, y, n.x, n.y, m)));
+  // Sample along the whole edge, not just its two ends: in a turned box the row's ends can leave
+  // through different screen edges while its middle still cuts across a screen corner.
+  const N = 16;
+  let best = 0;
+  for (let i = 0; i <= N; i++) {
+    const u = (i / N) * 2 - 1;
+    const x = edge === 'left' || edge === 'right' ? n.x * hw : u * hw;
+    const y = edge === 'left' || edge === 'right' ? u * hh : n.y * hh;
+    best = Math.max(best, exitDistance(box, x, y, n.x, n.y, m));
+  }
+  return best;
 }
 
 /**

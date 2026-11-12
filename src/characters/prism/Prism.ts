@@ -9,6 +9,7 @@ import { maxOffscreenDistance, offscreenStart } from '../../combat/offscreen';
 import { propTriangle, type Prop } from '../../core/World';
 import { hud, theme, VIEW } from '../../render/theme';
 import { px } from '../../tuning';
+import type { LookSpec } from '../Character';
 import { prismConfig, type PrismAttack, type PrismPhase, type PrismRules } from './prism.config';
 
 export type PrismPhaseState = PhaseState<PrismPhase>;
@@ -37,6 +38,15 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     return maxOffscreenDistance(this.world.box, extent) / p.speed;
   }
 
+  /** Volley triangles, rays (with their glow) and the refraction prism at this level. */
+  override lookSpecs(): LookSpec[] {
+    const out: LookSpec[] = [{ shape: 'triangle', a: this.rules.volleySize }];
+    const beam = this.resolved.attacks.beam;
+    if (beam) out.push({ shape: 'beam', a: beam.length!, b: this.rules.beamThickness, glow: true });
+    out.push({ prop: this.rules.prismRadius });
+    return out;
+  }
+
   /** The refraction prism: shown from the breather before a ray phase until that phase ends. */
   prop: Prop | null = null;
   /** Own-clock time the prism was last placed (relocation waits a full cooldown). */
@@ -59,6 +69,7 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     return p.cooldown! / this.rules.phaseIntensity;
   }
   private lastEdge: Wall | null = null;
+  private volleys = 0;
   private readonly tri: Triangle = { ax: 0, ay: 0, bx: 0, by: 0, cx: 0, cy: 0 };
 
   private get rules(): PrismRules {
@@ -75,7 +86,10 @@ export class Prism extends Character<PrismAttack, PrismRules> {
 
   // --- Levels 1+: triangle volleys from one edge, constant spacing, one safe gap --
   private planVolley(p: ResolvedAttack): Shot[] {
-    const edge = this.pickEdge();
+    // The opening volley is pre-fired (it appears part way in); from a side the row lands beside
+    // the box, clear of the HUD bands, where a top/bottom row would appear inside a band.
+    const edge = this.volleys++ === 0 ? (this.rng() < 0.5 ? 'left' : 'right') : this.pickEdge();
+    this.lastEdge = edge;
     const gapAt = this.rng();
     const style = {
       shape: 'triangle' as const, a: this.rules.volleySize, faceVelocity: true, noPop: true,
@@ -105,27 +119,36 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     for (let i = 0; i < p.count!; i++) {
       let edge = EDGES[Math.floor(this.rng() * 4)]!;
       const u = this.rng() * 1.6 - 0.8; // position along the edge, -0.8..0.8 of half length
-      let angle = (this.rng() - 0.5) * 0.7;
+      const jitter = (this.rng() - 0.5) * 0.7;
       const aimed = !!(prismP && this.rng() < prismP.aimChance!) && this.prop !== null;
       // Aimed rays enter through the wall facing the prism (which stands outside the box).
       if (aimed) edge = this.prop!.x < 0 ? 'left' : 'right';
-      const [nx, ny] = INWARD[edge];
-      const ex = nx !== 0 ? -nx * box.halfWidth : u * box.halfWidth;
-      const ey = ny !== 0 ? -ny * box.halfHeight : u * box.halfHeight;
-      angle += Math.atan2(ny, nx);
-      // Aimed: the ray's line runs from off screen through the prism to the wall point, so it
-      // refracts (fans into three) before entering the box. Otherwise from off screen to the wall point.
-      let start = offscreenStart(box, ex, ey, angle, extent);
-      let toBox = start.distance;
-      if (aimed) {
-        const P = this.prop!;
-        angle = Math.atan2(ey - P.y, ex - P.x);
-        start = offscreenStart(box, P.x, P.y, angle, extent);
-        toBox = start.distance + Math.hypot(ex - P.x, ey - P.y);
-      }
-      const a = angle;
-      const s = start;
-      shots.push({ lead: toBox / p.speed!, fire: () => this.spawnBeam(s.x, s.y, a, p.speed!, p, 0, 0, true) });
+      // The path is worked out against the box as it is now (for the lead) and again when the ray
+      // spawns, so it still crosses the box (and the prism) if the box was shoved or turned meanwhile.
+      const path = () => {
+        const [nx, ny] = INWARD[edge];
+        const ex = nx !== 0 ? -nx * box.halfWidth : u * box.halfWidth;
+        const ey = ny !== 0 ? -ny * box.halfHeight : u * box.halfHeight;
+        let angle = jitter + Math.atan2(ny, nx);
+        // Aimed: the ray's line runs from off screen through the prism to the wall point, so it
+        // refracts (fans into three) before entering the box. Otherwise from off screen to the wall point.
+        let start = offscreenStart(box, ex, ey, angle, extent);
+        let toBox = start.distance;
+        const P = aimed ? this.prop : null;
+        if (P) {
+          angle = Math.atan2(ey - P.y, ex - P.x);
+          start = offscreenStart(box, P.x, P.y, angle, extent);
+          toBox = start.distance + Math.hypot(ex - P.x, ey - P.y);
+        }
+        return { start, angle, toBox };
+      };
+      shots.push({
+        lead: path().toBox / p.speed!,
+        fire: () => {
+          const { start, angle } = path();
+          this.spawnBeam(start.x, start.y, angle, p.speed!, p, 0, 0, true);
+        },
+      });
     }
     return shots;
   }
@@ -152,26 +175,57 @@ export class Prism extends Character<PrismAttack, PrismRules> {
     this.placedAt = this.clock;
     const r = this.rules.prismRadius;
     if (!this.prop) {
-      this.prop = { shape: 'triangle', x: 0, y: 0, r, rotation: 0, color: this.color, refracts: true };
+      this.prop = { shape: 'triangle', x: 0, y: 0, r, rotation: 0, color: theme.prismProp, refracts: true };
       this.world.props.push(this.prop);
     }
     // Outside the box, beside its left or right wall, inside the screen and clear of the HUD bands
-    // (theme.hud), where aimed rays pass on their way in. Chosen in world space, stored box-local.
-    const side = this.rng() < 0.5 ? -1 : 1;
+    // (theme.hud), where aimed rays pass on their way in. Chosen and kept in WORLD space (like
+    // bullets, it stays put when the box is shoved or turned); the prop's box-local copy follows.
+    // If the box is displaced so one side has no room, the other side is used.
+    const first = this.rng() < 0.5 ? -1 : 1;
     const gap = r + this.rules.prismGap;
-    const wx0 = box.x + side * (box.halfWidth + gap);
-    const wx = wx0 + side * this.rng() * this.rules.prismSpread;
+    const spread = this.rng() * this.rules.prismSpread;
     const margin = r + px(6);
-    const x = Math.max(margin, Math.min(VIEW.width - margin, wx));
-    const yMin = Math.max(hud.top.y + hud.top.height + margin, box.y - box.halfHeight);
-    const yMax = Math.min(hud.bottom.y - margin, box.y + box.halfHeight);
+    const ext = this.boxExtent();
+    let x = 0;
+    for (const side of [first, -first]) {
+      const wx = box.x + side * (ext.hx + gap + spread);
+      x = Math.max(margin, Math.min(VIEW.width - margin, wx));
+      if (Math.abs(x - box.x) >= ext.hx + r) break;
+    }
+    const yMin = Math.max(hud.top.y + hud.top.height + margin, box.y - ext.hy);
+    const yMax = Math.min(hud.bottom.y - margin, box.y + ext.hy);
     const y = yMin + this.rng() * Math.max(0, yMax - yMin);
-    const local = box.toLocal({ x, y });
-    this.prop.x = local.x;
-    this.prop.y = local.y;
-    this.prop.rotation = this.rng() * Math.PI * 2;
+    this.propWorld = { x, y, rotation: this.rng() * Math.PI * 2 };
+    this.syncProp();
   }
 
+  /** World-space placement of the prism (it never rides the box). */
+  private propWorld = { x: 0, y: 0, rotation: 0 };
+
+  /** Half extents of the box's rotated outline in world space. */
+  private boxExtent(): { hx: number; hy: number } {
+    const { box } = this.world;
+    const c = Math.abs(Math.cos(box.rotation)), s = Math.abs(Math.sin(box.rotation));
+    return { hx: box.halfWidth * c + box.halfHeight * s, hy: box.halfWidth * s + box.halfHeight * c };
+  }
+
+  /** Re-express the world-fixed prism in the box's current frame. */
+  private syncProp(): void {
+    if (!this.prop) return;
+    const { box } = this.world;
+    const l = box.toLocal(this.propWorld);
+    this.prop.x = l.x;
+    this.prop.y = l.y;
+    this.prop.rotation = this.propWorld.rotation - box.rotation;
+  }
+
+  /** Whether the box (shoved by another character) now covers part of the prism. */
+  private propOverlapsBox(): boolean {
+    const p = this.prop!;
+    const { box } = this.world;
+    return Math.abs(p.x) < box.halfWidth + p.r && Math.abs(p.y) < box.halfHeight + p.r;
+  }
 
   /** Any of our beams whose center enters the prism fans into refractCount beams that ignore prisms. */
   protected override update(): void {
@@ -186,6 +240,11 @@ export class Prism extends Character<PrismAttack, PrismRules> {
       this.placePrism();
     } else if (st.next !== 'ray' && this.prop) {
       this.removePrism();
+    }
+    // The prism is world-fixed: follow the box frame, and step aside if the box was pushed onto it.
+    if (this.prop) {
+      this.syncProp();
+      if (this.propOverlapsBox()) this.placePrism();
     }
     const prop = this.prop;
     const pp = this.resolved.attacks.prism;

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Bullet, bulletTriangle, type BulletSpec } from './Bullet';
 import { bulletHitsCircle } from './hitTest';
 import { circleVsCircle, circleVsRect, circleVsTriangle } from './Collision';
-import { SPAWN_POP_TIME } from '../tuning';
+import { SPAWN_FADE_TIME } from '../tuning';
 
 /** Each case: exact contact hits, 0.01 px further misses, 0.01 px closer (graze) hits. */
 const D = 0.01;
@@ -116,16 +116,17 @@ describe('bulletHitsCircle uses the drawn size for every shape', () => {
     expect(bulletHitsCircle(b, { x: 16, y: 0, r })).toBe(true);
     expect(bulletHitsCircle(b, { x: 16 + D, y: 0, r })).toBe(false);
   });
-  it('spawn pop scales the hitbox together with the drawing, never past full size', () => {
+  it('spawn fade: full-size hitbox from the first step, only the drawing fades in', () => {
     const b = new Bullet().init({ shape: 'circle', a: 10, x: 0, y: 0, damage: 1 });
-    expect(b.scale).toBeCloseTo(0.6);
-    expect(bulletHitsCircle(b, { x: 12 + D, y: 0, r })).toBe(false);
-    expect(bulletHitsCircle(b, { x: 12, y: 0, r })).toBe(true);
-    b.age = SPAWN_POP_TIME / 2;
-    expect(b.scale).toBeGreaterThan(0.6);
-    expect(b.scale).toBeLessThan(1);
-    b.age = SPAWN_POP_TIME;
     expect(b.scale).toBe(1);
+    expect(b.fadeAlpha).toBe(0);
     expect(bulletHitsCircle(b, { x: 16, y: 0, r })).toBe(true);
+    expect(bulletHitsCircle(b, { x: 16 + D, y: 0, r })).toBe(false);
+    b.age = SPAWN_FADE_TIME / 2;
+    expect(b.fadeAlpha).toBeCloseTo(0.5);
+    b.age = SPAWN_FADE_TIME;
+    expect(b.fadeAlpha).toBe(1);
+    const off = new Bullet().init({ shape: 'circle', a: 10, x: 0, y: 0, damage: 1, noPop: true });
+    expect(off.fadeAlpha).toBe(1);
   });
 });

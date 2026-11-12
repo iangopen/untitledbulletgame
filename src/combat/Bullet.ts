@@ -1,6 +1,6 @@
 import type { ProjectileType } from './projectile';
 import type { Circle, Rect, Triangle } from './Collision';
-import { SPAWN_POP_TIME } from '../tuning';
+import { GOLD_FADE_TIME, SPAWN_FADE_TIME } from '../tuning';
 
 /**
  * Shapes and their size fields (a, b):
@@ -70,6 +70,13 @@ export interface BulletSpec {
   form?: CompositeForm;
   /** Draw a faint decorative glow around it (light rays). Never part of the hitbox. */
   glow?: boolean;
+  /**
+   * A drawn OBJECT, not a projectile (The Warden's fists): never collides, never outlined by the
+   * hitbox overlay, not an attack for the HUD-band rule. Drawn in `tint` with an edge outline.
+   */
+  decor?: boolean;
+  /** Fill color for decor objects (projectiles always use their type color). */
+  tint?: number;
 }
 
 export class Bullet {
@@ -102,6 +109,8 @@ export class Bullet {
   onArm: ArmHook | undefined = undefined;
   form: CompositeForm | null = null;
   glow = false;
+  decor = false;
+  tint = 0;
   /** Pre-step position and rotation, for render interpolation only. Spawns start equal to the current state. */
   px = 0;
   py = 0;
@@ -135,6 +144,8 @@ export class Bullet {
     this.onArm = s.onArm;
     this.form = s.form ?? null;
     this.glow = s.glow ?? false;
+    this.decor = s.decor ?? false;
+    this.tint = s.tint ?? 0;
     this.snapshot();
     return this;
   }
@@ -146,13 +157,24 @@ export class Bullet {
     this.prot = this.rotation;
   }
 
-  /** Spawn-pop scale; draw and hitbox both use it. Eases 0.6 -> 1 (no overshoot, so the hitbox never exceeds its final size). */
+  /**
+   * Size factor shared by drawing and the hitbox. Always 1: bullets fade into existence at full
+   * size (see `fadeAlpha`); there is no spawn pop or grow-in. Growing attacks (snowballs) change
+   * their size fields instead.
+   */
   get scale(): number {
-    // Pre-active and growing: visual only (a pre-active bullet never collides).
-    if (!this.armed && this.growIn) return Math.min(1, this.age / this.armAt);
-    if (this.noPop || this.age >= SPAWN_POP_TIME) return 1;
-    const t = this.age / SPAWN_POP_TIME;
-    return 0.6 + 0.4 * (1 - (1 - t) * (1 - t));
+    return 1;
+  }
+
+  /**
+   * Visual-only fade-in (0..1): a new bullet fades in over SPAWN_FADE_TIME (skipped with noPop,
+   * e.g. off-screen spawns); a `growIn` pre-active bullet fades in over its gold time (at most
+   * GOLD_FADE_TIME). The hitbox is always full size; a pre-active bullet never collides anyway.
+   */
+  get fadeAlpha(): number {
+    if (this.growIn && this.armAt > 0) return Math.min(1, this.age / Math.min(this.armAt, GOLD_FADE_TIME));
+    if (this.noPop) return 1;
+    return Math.min(1, this.age / SPAWN_FADE_TIME);
   }
 }
 

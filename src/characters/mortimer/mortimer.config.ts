@@ -1,5 +1,6 @@
 import type { CharacterConfig } from '../config';
 import { px } from '../../tuning';
+import { makeForm, type CompositeForm, type Part } from '../../combat/composite';
 
 export type MortimerAttack = 'snowfall' | 'roll' | 'blizzard';
 
@@ -10,9 +11,10 @@ export interface MortimerRules {
   breather: number;
   /** Phase order. Each attack is its own phase; only unlocked attacks take part, so L1-5 is snowfall, breather, snowfall... */
   phaseOrder: readonly MortimerAttack[];
-  /** Snowfall: distance between flake slots along the top edge (px), flake radius (px), sway frequency (rad/s), speed spread (up to this fraction faster, starting further away so arrival is unchanged). */
+  /** Snowfall: distance between flake slots along the top edge (px), flake radius (px, center to arm tip), sway frequency (rad/s), speed spread (up to this fraction faster, starting further away so arrival is unchanged), slow spin (rad/s). */
   flakeSpacing: number;
   flakeSize: number;
+  flakeSpin: number;
   swayFreq: number;
   flakeSpeedSpread: number;
   /** Snowball roll: rows (slots) along a side the balls can roll in on. */
@@ -71,7 +73,8 @@ export const mortimerConfig: CharacterConfig<MortimerAttack, MortimerRules> = {
     breather: 1,
     phaseOrder: ['snowfall', 'roll', 'blizzard'],
     flakeSpacing: px(18),
-    flakeSize: px(4),
+    flakeSize: px(6),
+    flakeSpin: 1.2,
     swayFreq: 1.6,
     flakeSpeedSpread: 0.15,
     rollLanes: 3,
@@ -82,3 +85,29 @@ export const mortimerConfig: CharacterConfig<MortimerAttack, MortimerRules> = {
     gustSegments: 6,
   },
 };
+
+const flakes = new Map<number, CompositeForm>();
+/**
+ * A cute six-armed snowflake of radius R (center to arm tip): a small hub, six thin arms and a pair
+ * of short side branches on each arm. Every part is drawn and collided (combat/composite.ts).
+ */
+export function snowflakeForm(R: number): CompositeForm {
+  let f = flakes.get(R);
+  if (f) return f;
+  const parts: Part[] = [{ kind: 'circle', x: 0, y: 0, r: R * 0.24 }];
+  const t = Math.max(0.9, R * 0.11); // arm half-thickness
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3;
+    const c = Math.cos(a), s = Math.sin(a);
+    parts.push({ kind: 'rect', x: (c * R) / 2, y: (s * R) / 2, hw: R / 2, hh: t, rot: a });
+    // Two branches at 60% of the arm, angled 50 degrees off it, outward.
+    const bx = c * R * 0.6, by = s * R * 0.6, L = R * 0.34;
+    for (const k of [-1, 1]) {
+      const b = a + k * 0.87;
+      parts.push({ kind: 'rect', x: bx + (Math.cos(b) * L) / 2, y: by + (Math.sin(b) * L) / 2, hw: L / 2, hh: t * 0.85, rot: b });
+    }
+  }
+  f = makeForm(parts);
+  flakes.set(R, f);
+  return f;
+}

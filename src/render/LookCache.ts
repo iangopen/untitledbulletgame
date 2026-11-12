@@ -26,6 +26,8 @@ export const GLOW_LAYERS: readonly [number, number][] = [[7, 0.5], [3.5, 1]];
 const CIRCLE_BUCKET = 1.15;
 /** Transparent texels around every shape so its anti-aliased edge is never clipped. */
 const PAD = 2;
+/** Stroke width of decor edges (layout px). */
+const EDGE_WIDTH = 2;
 
 let formIds = new WeakMap<CompositeForm, number>();
 let nextFormId = 1;
@@ -96,6 +98,20 @@ export class LookCache {
       t.b = b.b;
       t.form = b.form;
     });
+  }
+
+  /**
+   * The edge of a decor object (a fist): every part outlined, so its rocky blocks read as solid
+   * objects with visible edges. Drawing only; decor never collides.
+   */
+  edge(b: Bullet): Look {
+    const key = b.shape === 'composite' ? `e:f:${b.form ? formId(b.form) : 0}` : `e:${b.shape}:${b.a.toFixed(3)}:${b.b.toFixed(3)}`;
+    return this.get(key, 1, (t) => {
+      t.shape = b.shape;
+      t.a = b.a;
+      t.b = b.b;
+      t.form = b.form;
+    }, false, EDGE_WIDTH);
   }
 
   /** The decorative glow of a bullet (layers around each rect part), or the same key family. */
@@ -190,7 +206,7 @@ export class LookCache {
    * Build (once) the look of the template bullet set up by `setup`: every primitive of its exact
    * shape at rotation 0, origin at the bullet position, filled white (or its glow layers).
    */
-  private get(key: string, size: number, setup: (t: Bullet) => void, glow = false): Look {
+  private get(key: string, size: number, setup: (t: Bullet) => void, glow = false, stroke = 0): Look {
     const hit = this.looks.get(key);
     if (hit) return hit;
     const t = this.tpl;
@@ -209,15 +225,15 @@ export class LookCache {
       else if (p.kind === 'rect') prims.push({ kind: 'rect', r: { ...p.r } });
       else prims.push({ kind: 'tri', t: { ...p.t } });
     });
-    const pad = glow ? Math.max(...GLOW_LAYERS.map(([p]) => p)) : 0;
+    const pad = glow ? Math.max(...GLOW_LAYERS.map(([p]) => p)) : stroke;
     // Tight bounds in layout px.
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     const add = (x: number, y: number, r: number) => {
       x0 = Math.min(x0, x - r); x1 = Math.max(x1, x + r); y0 = Math.min(y0, y - r); y1 = Math.max(y1, y + r);
     };
     for (const p of prims) {
-      if (p.kind === 'circle') add(p.c.x, p.c.y, p.c.r);
-      else if (p.kind === 'tri') { add(p.t.ax, p.t.ay, 0); add(p.t.bx, p.t.by, 0); add(p.t.cx, p.t.cy, 0); }
+      if (p.kind === 'circle') add(p.c.x, p.c.y, p.c.r + stroke);
+      else if (p.kind === 'tri') { add(p.t.ax, p.t.ay, stroke); add(p.t.bx, p.t.by, stroke); add(p.t.cx, p.t.cy, stroke); }
       else for (const q of rectCorners(p.r, this.pts)) add(q.x, q.y, pad * Math.SQRT2);
     }
     const k = this.k;
@@ -241,6 +257,18 @@ export class LookCache {
           this.poly(ctx, rectCorners(r, this.pts));
           ctx.fill();
         }
+      }
+    } else if (stroke > 0) {
+      // Outline of every part (decor edges): drawn inside and out of each part's boundary.
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = stroke;
+      ctx.lineJoin = 'round';
+      for (const p of prims) {
+        ctx.beginPath();
+        if (p.kind === 'circle') ctx.arc(p.c.x, p.c.y, p.c.r, 0, Math.PI * 2);
+        else if (p.kind === 'tri') this.sub(ctx, [{ x: p.t.ax, y: p.t.ay }, { x: p.t.bx, y: p.t.by }, { x: p.t.cx, y: p.t.cy }]);
+        else this.sub(ctx, rectCorners(p.r, this.pts));
+        ctx.stroke();
       }
     } else {
       ctx.fillStyle = '#fff';

@@ -71,23 +71,48 @@ export class World {
     for (const b of this.pool.all) if (b.active) b.snapshot();
   }
 
+  /**
+   * Re-express every active bullet in the moved box's frame so it stays where it was in the world
+   * (position, velocity and rotation), given the box's center and rotation before this step.
+   */
+  private keepBulletsWorldFixed(ox: number, oy: number, orot: number): void {
+    const box = this.box;
+    const c0 = Math.cos(orot), s0 = Math.sin(orot);
+    const d = box.rotation - orot;
+    const cd = Math.cos(d), sd = Math.sin(d);
+    const c1 = Math.cos(box.rotation), s1 = Math.sin(box.rotation);
+    for (const b of this.pool.all) {
+      if (!b.active) continue;
+      const wx = ox + b.x * c0 - b.y * s0 - box.x;
+      const wy = oy + b.x * s0 + b.y * c0 - box.y;
+      b.x = wx * c1 + wy * s1;
+      b.y = -wx * s1 + wy * c1;
+      if (d !== 0) {
+        const vx = b.vx;
+        b.vx = vx * cd + b.vy * sd;
+        b.vy = -vx * sd + b.vy * cd;
+        b.rotation -= d;
+      }
+    }
+  }
+
   step(input: MoveInput, dt: number): void {
     const { soul, pool, box } = this;
     this.snapshot();
     this.steps++;
     this.time += dt;
-    // 1. Box motion. Anchored resizes report a content shift so contents stay world-fixed.
+    // 1. Box motion. The soul rides the box (box-local); bullets stay WORLD-fixed: wherever the box
+    // moves, turns or (anchored) resizes, each bullet keeps its world position, heading and velocity,
+    // so a shoved or spun box runs into attacks already in flight. Hooks that pin a bullet to the
+    // box (Ulysses' axe pivot, The Warden's fists) re-pin it in pool.update below.
+    const ox = box.x, oy = box.y, orot = box.rotation;
     box.step(dt);
     const sh = box.contentShift;
     if (sh.x !== 0 || sh.y !== 0) {
       soul.pos.x += sh.x;
       soul.pos.y += sh.y;
-      for (const b of pool.all) {
-        if (!b.active) continue;
-        b.x += sh.x;
-        b.y += sh.y;
-      }
     }
+    if (box.x !== ox || box.y !== oy || box.rotation !== orot) this.keepBulletsWorldFixed(ox, oy, orot);
     // 2. Soul. Clamping every step means a moving wall pushes the soul inward; it can never be outside.
     // The active ability runs first; it may take over movement (dash).
     const ab = this.ability;
@@ -112,7 +137,8 @@ export class World {
     hit.r = soul.hitRadius;
     for (const b of pool.all) {
       // Pre-active (gold) bullets are drawn but never collide.
-      if (!b.active || !b.armed || !bulletHitsCircle(b, hit)) continue;
+      // Decor objects (The Warden's fists) never collide.
+      if (!b.active || !b.armed || b.decor || !bulletHitsCircle(b, hit)) continue;
       // Projectile type rules (blue/orange) are decided in one place, from this step's movement.
       if (!projectileHurts(b.kind, soul.moving)) continue;
       // All damage goes through Soul.damage; it decides i-frames and KR.

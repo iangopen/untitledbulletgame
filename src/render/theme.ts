@@ -15,7 +15,7 @@ export const theme = {
   /** Quiet text (hints, captions). */
   textMuted: 0x4a4a58,
   /**
-   * HP bar: mint green. Away from every projectile and form color (white f4f4f8, blue 2e8bff,
+   * HP bar: mint green. Away from every projectile and form color (white f4f4f8, blue 2aa0ff,
    * orange ff8a1c, KR magenta ff2bd6, gold forming e9cf6a), Ulysses' gold f2c230, damaging-wall
    * lime 9dff3a, and red (the player).
    */
@@ -25,7 +25,8 @@ export const theme = {
   /** Projectile colors, one per type (combat/projectile.ts). Never red; fixed for every character. */
   bullet: {
     white: 0xf4f4f8,
-    blue: 0x2e8bff,
+    /** Shifted a little toward cyan (was #2e8bff). */
+    blue: 0x2aa0ff,
     orange: 0xff8a1c,
     kr: 0xff2bd6,
   },
@@ -40,10 +41,20 @@ export const theme = {
   shine: 0xffffff,
   /** Character accent colors (one per character; never red). */
   prism: 0x3de8ff,
+  /** Prism's refraction prism (a prop): light violet, kept distinct from blue projectiles (#2aa0ff). */
+  prismProp: 0xb49cff,
   /** Mortimer: pale ice, darker and cooler than white projectiles and far lighter than blue ones. */
   mortimer: 0xb4d4e0,
   /** Ulysses: royal gold (roster and profile box only; projectiles use their type colors). */
   ulysses: 0xf2c230,
+  /** The Warden: bright golem orange (roster and profile box only). */
+  warden: 0xff9b3d,
+  /**
+   * The Warden's fists (objects, not projectiles; never collide): dark earthy burnt orange with a
+   * lighter rocky edge, so they read as solid things and not as orange projectiles (#ff8a1c).
+   */
+  wardenFist: 0x8f4519,
+  wardenFistEdge: 0xe0874a,
   /** Non-damaging props (e.g. refraction prism) draw as translucent fill + outline. */
   propFillAlpha: 0.18,
   /**

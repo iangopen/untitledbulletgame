@@ -109,11 +109,16 @@ export function axeForm(reach: number, side: 1 | -1): CompositeForm {
   let f = axeForms.get(key);
   if (!f) {
     const R = reach;
+    // A broad head: about 44 px along the handle (it was 18), so the head reads clearly against
+    // the long handle at full reach. Parts are its exact hitbox.
     f = makeForm([
-      { kind: 'rect', x: (R + 8) / 2, y: 0, hw: (R - 20) / 2, hh: 3 }, // handle (starts 14 px from the pivot)
-      { kind: 'rect', x: R - 14, y: side * 10, hw: 9, hh: 12 }, // head
-      { kind: 'tri', ax: R - 26, ay: side * 20, bx: R - 2, by: side * 20, cx: R - 14, cy: side * 30 }, // edge
-      { kind: 'tri', ax: R - 18, ay: -side * 3, bx: R - 10, by: -side * 3, cx: R - 14, cy: -side * 10 }, // back spike
+      { kind: 'rect', x: (R - 16) / 2, y: 0, hw: (R - 44) / 2, hh: 3 }, // handle (from 14 px out, into the head)
+      { kind: 'rect', x: R - 22, y: side * 11, hw: 16, hh: 11 }, // head block
+      { kind: 'tri', ax: R - 38, ay: side * 2, bx: R - 38, by: side * 22, cx: R - 46, cy: side * 26 }, // rear flare
+      { kind: 'tri', ax: R - 6, ay: side * 2, bx: R - 6, by: side * 22, cx: R + 2, cy: side * 26 }, // front flare
+      { kind: 'rect', x: R - 22, y: side * 24, hw: 24, hh: 2 }, // cutting edge (full width)
+      { kind: 'tri', ax: R - 46, ay: side * 26, bx: R + 2, by: side * 26, cx: R - 22, cy: side * 31 }, // edge belly
+      { kind: 'tri', ax: R - 28, ay: -side * 3, bx: R - 16, by: -side * 3, cx: R - 22, cy: -side * 11 }, // back spike
     ]);
     axeForms.set(key, f);
   }

@@ -77,6 +77,9 @@ export class BattleScene extends Phaser.Scene {
     // The equipped active ability (plain-data loadout; the Phase 8 shop will change it).
     this.world.ability = createActive(loadLoadout(browserStorage()));
     this.director = new Director(this.world, this.roster, new TimerMode(devDuration()));
+    // Rasterise every look the roster can produce now, behind the scene fade, so no texture is
+    // built mid-battle (rebuilt the same way if the render scale changes).
+    this.view.setPrewarm(this.director.characters.flatMap((c) => c.lookSpecs?.() ?? []));
     this.paused = false;
     this.ending = false;
     this.lastShownSecond = -1;

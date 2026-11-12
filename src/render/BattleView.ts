@@ -10,6 +10,7 @@ import { px } from '../tuning';
 import { BoxFrame, interpBullet, lerpPoint } from './interp';
 import { flashScreen, shakeScreen, shineShape } from './effects';
 import { LookCache, type Look } from './LookCache';
+import type { LookSpec } from '../characters/Character';
 import {
   DESPAWN_FADE_TIME,
   HIT_FLASH_MS,
@@ -24,6 +25,11 @@ import { Dash } from '../abilities/actives/Dash';
 import { STEP } from '../core/Clock';
 
 const GHOSTS = 256;
+/** Shine ring texture buckets: radius rounded up to powers of this (the sprite scales to the exact radius). */
+const RING_BUCKET = 1.04;
+const ringExp = (r: number): number => Math.ceil(Math.log(Math.max(0.5, r)) / Math.log(RING_BUCKET) - 1e-9);
+const ringOf = (k: number): number => Number(Math.pow(RING_BUCKET, k).toFixed(3));
+const ringBucket = (r: number): number => ringOf(ringExp(r));
 
 /**
  * A pool of Phaser images at one depth, reused every frame: `begin`, then `next(look)` per thing
@@ -137,7 +143,9 @@ export class BattleView {
     this.layers = [this.walls, this.ghostGlows, this.ghostSprites, this.propSprites, this.glowSprites, this.bulletSprites, this.shineSprites, this.soulSprites];
     scene.events.once('shutdown', () => this.looks.clear());
     // Bullets are not clipped to the box: attacks are seen arriving from off screen.
-    world.pool.onDespawn = (b) => this.addGhost(b);
+    world.pool.onDespawn = (b, reason) => {
+      if (reason !== 'cancel') this.addGhost(b);
+    };
   }
 
   private addGhost(src: Bullet): void {
@@ -154,6 +162,8 @@ export class BattleView {
     b.armed = src.armed; // a pre-active (gold) bullet fades out gold
     b.form = src.form;
     b.glow = src.glow;
+    b.decor = src.decor;
+    b.tint = src.tint;
     b.growIn = false;
     b.noPop = true;
     g.t = 0;
@@ -204,8 +214,22 @@ export class BattleView {
     const box = this.frame;
     const p = box.toWorld(b, this.tmp);
     const rot = box.rotation + b.rotation;
-    const color = this.colorOf(b);
     const s = b.scale;
+    // Fade into existence at full size (visual only; the hitbox is full size from the first step).
+    alpha *= b.fadeAlpha;
+    if (b.decor) {
+      // An object, not a projectile (The Warden's fists): earthy fill plus a lighter rocky edge.
+      const fill = this.looks.bullet(b);
+      const fi = this.propSprites.next(fill).setPosition(p.x, p.y).setRotation(rot).setScale(s / fill.k).setTint(b.tint);
+      const edge = this.looks.edge(b);
+      const ei = this.propSprites.next(edge).setPosition(p.x, p.y).setRotation(rot).setScale(s / edge.k).setTint(theme.wardenFistEdge);
+      if (alpha < 1) {
+        fi.setAlpha(alpha);
+        ei.setAlpha(alpha);
+      }
+      return;
+    }
+    const color = this.colorOf(b);
     if (b.glow) {
       const g = this.looks.glow(b);
       glowLayer.next(g).setPosition(p.x, p.y).setRotation(rot).setScale(s / g.k).setTint(color).setAlpha(theme.glowAlpha * alpha);
@@ -214,6 +238,57 @@ export class BattleView {
     const k = b.shape === 'circle' ? (s * b.a) / look.size : s;
     const img = core.next(look).setPosition(p.x, p.y).setRotation(rot).setScale(k / look.k).setTint(color);
     if (alpha < 1) img.setAlpha(alpha);
+  }
+
+  /**
+   * Looks the active roster can produce (set by the battle scene from each character's
+   * `lookSpecs`). Every one is rasterised up front, behind the scene fade, and again whenever the
+   * render scale changes, so no texture is built mid-battle.
+   */
+  private warmSpecs: readonly LookSpec[] = [];
+  /** Texture builds done by the last prewarm (diagnostics: `looks.built - warmBuilt` = built since). */
+  warmBuilt = 0;
+
+  setPrewarm(specs: readonly LookSpec[]): void {
+    this.warmSpecs = specs;
+    this.prewarm();
+  }
+
+  /** Build every known look now (no-op for ones already cached). */
+  prewarm(): void {
+    const scale = renderScale();
+    if (this.looks.sync(scale)) for (const l of this.layers) l.reset();
+    const t = this.ib;
+    const lk = this.looks;
+    lk.disc(this.world.soul.hitRadius);
+    lk.line(line.box);
+    lk.line(line.danger);
+    for (const spec of this.warmSpecs) {
+      if (spec.prop) {
+        lk.prop(spec.prop, theme.propFillAlpha, 1.5, 0.9);
+        continue;
+      }
+      t.shape = spec.shape!;
+      t.form = spec.form ?? null;
+      t.b = spec.b ?? spec.a ?? 0;
+      const radii = spec.radii ?? [spec.a ?? 0];
+      for (const a of radii) {
+        t.a = a;
+        if (spec.decor) lk.edge(t);
+        lk.bullet(t);
+        if (spec.glow) lk.glow(t);
+        if (spec.shine) {
+          // Shine rings: radius rounded to 0.5 px over the whole shine (see draw).
+          const e = bulletExtent(t);
+          // Every ring bucket the shine passes through (it widens monotonically).
+          const w = shineShape(e, 0).ringWidth;
+          const k0 = ringExp(shineShape(e, 0).ringR);
+          const k1 = ringExp(shineShape(e, 1).ringR);
+          for (let k = k0; k <= k1; k++) lk.ring(ringOf(k), w);
+        }
+      }
+    }
+    this.warmBuilt = lk.built;
   }
 
   /** A disc sprite (soul, trail, shine fill) of radius r at world (x, y). */
@@ -247,7 +322,10 @@ export class BattleView {
     this.path(g, 4);
     g.fillPath();
     // Textures follow the render resolution (quality setting, devicePixelRatio, window size).
-    if (this.looks.sync(renderScale())) for (const l of this.layers) l.reset();
+    if (this.looks.sync(renderScale())) {
+      for (const l of this.layers) l.reset();
+      this.prewarm();
+    }
     for (const l of this.layers) l.begin();
 
     // Walls: safe = thin white; damaging = thick lime (normal) or magenta (KR). Never red. Cached
@@ -294,8 +372,9 @@ export class BattleView {
         const c = box.toWorld(ib, this.tmp2);
         const sh = shineShape(bulletExtent(b), s / SHINE_TIME);
         this.disc(this.shineSprites, c.x, c.y, sh.fillR, theme.shine, sh.fillAlpha);
-        const ring = this.looks.ring(Math.round(sh.ringR * 2) / 2, sh.ringWidth);
-        this.shineSprites.next(ring).setPosition(c.x, c.y).setScale(1 / ring.k).setTint(theme.shine).setAlpha(sh.ringAlpha);
+        // Ring radius in buckets of RING_BUCKET (a few textures per shine), scaled to the exact radius.
+        const ring = this.looks.ring(ringBucket(sh.ringR), sh.ringWidth);
+        this.shineSprites.next(ring).setPosition(c.x, c.y).setScale(sh.ringR / ring.size / ring.k).setTint(theme.shine).setAlpha(sh.ringAlpha);
       }
     }
 
@@ -358,7 +437,8 @@ export class BattleView {
     // Hairline: 1 device pixel, so it shows exactly where the shape edge is at any zoom.
     og.lineStyle(1 / renderScale(), theme.hitboxOutline, 1);
     for (const b of pool.all) {
-      if (!b.active) continue;
+      // Decor objects (fists) never collide, so they have no hitbox to outline.
+      if (!b.active || b.decor) continue;
       // Through the collision primitives (composites part by part); glows are never outlined.
       bulletPrimitives(b, (p) => {
         const n = this.primWorld(p);

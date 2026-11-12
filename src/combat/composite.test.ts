@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BulletPool } from './BulletPool';
 import { bulletHitsCircle } from './hitTest';
 import { bulletPrimitives, curvedStreak, makeForm, type Primitive } from './composite';
-import { bulletExtent } from './Bullet';
+import { Bullet, bulletExtent } from './Bullet';
+import { interpBullet } from '../render/interp';
 
 // A "T": a long bar along +x and a short crossbar at x = 10, plus a round knob at the origin.
 const T = makeForm([
@@ -57,14 +58,15 @@ describe('composite shapes', () => {
     expect(seen).toEqual(['rect', 'rect', 'circle']);
   });
 
-  it('parts scale with the bullet (spawn pop / grow-in) about its origin', () => {
+  it('a forming (growIn) composite is full size from the start and only fades in', () => {
     const p = new BulletPool(2);
     const b = p.spawn({ shape: 'composite', form: T, x: 0, y: 0, a: 0, damage: 1, armDelay: 1, growIn: true })!;
-    b.age = 0.5; // half grown
-    expect(b.scale).toBeCloseTo(0.5);
+    b.age = 0.2; // half way through its fade (GOLD_FADE_TIME 0.4)
+    expect(b.scale).toBe(1);
+    expect(b.fadeAlpha).toBeCloseTo(0.5);
     const tips: number[] = [];
     bulletPrimitives(b, (q) => void (q.kind === 'rect' && tips.push(q.r.x + q.r.hw)));
-    expect(tips[0]).toBeCloseTo(25);
+    expect(tips[0]).toBeCloseTo(50);
   });
 
   it('curved streak: a chain of rects following the curve, joints covered', () => {
@@ -81,5 +83,44 @@ describe('composite shapes', () => {
       expect(bulletHitsCircle(b, { x, y, r: 0.5 })).toBe(true);
       if (i > 1 && i < 19) expect(bulletHitsCircle(b, { x, y: y + 4.5, r: 0.5 })).toBe(false);
     }
+  });
+});
+
+describe('themed shapes changed this session: drawn == hitbox', () => {
+  it('snowflake: six arms with branches; probes hit on the arms and miss between them', async () => {
+    const { snowflakeForm } = await import('../characters/mortimer/mortimer.config');
+    const R = 9;
+    const f = snowflakeForm(R);
+    expect(f.parts.length).toBe(1 + 6 * 3);
+    expect(f.extent).toBeGreaterThanOrEqual(R);
+    for (const rot of [0, 0.3, 1.1]) {
+      const b = new BulletPool(1).spawn({ shape: 'composite', form: f, x: 0, y: 0, a: 0, damage: 1, rotation: rot })!;
+      for (let i = 0; i < 6; i++) {
+        const a = rot + (i * Math.PI) / 3;
+        // Near the tip of every arm: hit. Half way between two arms at 80% radius: miss.
+        expect(bulletHitsCircle(b, { x: Math.cos(a) * R * 0.95, y: Math.sin(a) * R * 0.95, r: 0.2 })).toBe(true);
+        const m = a + Math.PI / 6;
+        expect(bulletHitsCircle(b, { x: Math.cos(m) * R * 0.9, y: Math.sin(m) * R * 0.9, r: 0.2 })).toBe(false);
+      }
+      const drawn: string[] = [];
+      const hit: string[] = [];
+      bulletPrimitives(b, (p) => void hit.push(JSON.stringify(p)));
+      bulletPrimitives(interpBullet(b, 1, new Bullet()), (p) => void drawn.push(JSON.stringify(p)));
+      expect(drawn).toEqual(hit);
+    }
+  });
+  it('axe head is much wider in proportion (about 48 px along the handle, was 18) and exact', async () => {
+    const { axeForm } = await import('../characters/ulysses/ulysses.config');
+    const f = axeForm(210, 1);
+    let x0 = Infinity, x1 = -Infinity;
+    for (const p of f.parts.slice(1)) {
+      if (p.kind === 'rect') { x0 = Math.min(x0, p.x - p.hw); x1 = Math.max(x1, p.x + p.hw); }
+      if (p.kind === 'tri') { x0 = Math.min(x0, p.ax, p.bx, p.cx); x1 = Math.max(x1, p.ax, p.bx, p.cx); }
+    }
+    expect(x1 - x0).toBeGreaterThanOrEqual(46);
+    const b = new BulletPool(1).spawn({ shape: 'composite', form: f, x: 0, y: 0, a: 0, damage: 1 })!;
+    // Inside the head block's far corner region, and just past the cutting edge.
+    expect(bulletHitsCircle(b, { x: 210 - 40, y: 20, r: 0.2 })).toBe(true);
+    expect(bulletHitsCircle(b, { x: 210 - 22, y: 31.6, r: 0.2 })).toBe(false);
   });
 });

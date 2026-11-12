@@ -4,6 +4,8 @@ import { nextPhaseArrival, phaseAt, type PhaseState } from '../phases';
 import type { ArmHook, Bullet, StepHook, Wall } from '../../combat/Bullet';
 import { line, lineSlots, type BulletStyle } from '../../combat/patterns';
 import { theme } from '../../render/theme';
+import { aabbInBand, bulletWorldAabb } from '../../combat/bands';
+import type { LookSpec } from '../Character';
 import { SWORD_FLAGS, SWORD_FORM, axeForm, ulyssesConfig, type UlyssesAttack, type UlyssesRules } from './ulysses.config';
 
 export type UlyssesPhaseState = PhaseState<UlyssesAttack>;
@@ -67,6 +69,14 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
     }
   }
 
+  /** Swords (gold then white, with a shine) and both axe sides at this level's reach. */
+  override lookSpecs(): LookSpec[] {
+    const out: LookSpec[] = [{ shape: 'composite', form: SWORD_FORM, shine: true }];
+    const axe = this.resolved.attacks.axe;
+    if (axe) for (const side of [1, -1] as const) out.push({ shape: 'composite', form: axeForm(axe.reach!, side), shine: true });
+    return out;
+  }
+
   private pickEdge(): Wall {
     let e: Wall;
     do e = EDGES[Math.floor(this.rng() * 4)]!;
@@ -91,12 +101,37 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
   // --- Summoned swords: grow outside the box, shine, lock onto the soul, fly through ---
   private planSummon(p: ResolvedAttack): Shot[] {
     const { box, pool } = this.world;
-    const edge = this.pickEdge();
-    const [nx, ny] = INWARD[edge];
-    const style = this.swordStyle(p, p.grow!, Math.atan2(ny, nx), { onArm: this.lockOn(p.speed!) });
-    const opts = { edge, count: this.rules.summonSlots, speed: 0, offset: this.formOffset(this.rules.swordLength / 2), style };
-    const gaps = this.gapsFor(lineSlots(box, opts), p.count!);
-    return [{ lead: p.grow!, fire: () => void line(pool, box, { ...opts, gaps }) }];
+    const first = this.pickEdge();
+    const rowFor = (edge: Wall) => {
+      const [nx, ny] = INWARD[edge];
+      const style = this.swordStyle(p, p.grow!, Math.atan2(ny, nx), { onArm: this.lockOn(p.speed!) });
+      return { edge, count: this.rules.summonSlots, speed: 0, offset: this.formOffset(this.rules.swordLength / 2), style };
+    };
+    const gaps = this.gapsFor(lineSlots(box, rowFor(first)), p.count!);
+    // Formed against the box as it is at the spawn moment (it may have been shoved or turned). If
+    // the row would form in a HUD band, the next edge that fits is used instead.
+    const others = EDGES.filter((e) => e !== first);
+    return [{ lead: p.grow!, fire: () => void this.spawnClear([first, ...others].map((e) => () => line(pool, box, { ...rowFor(e), gaps }))) }];
+  }
+
+  /**
+   * Run the first spawner whose new bullets all form clear of the HUD bands; a row that would not
+   * is removed unseen ('cancel') and the next is tried. Returns whether one fitted.
+   */
+  private spawnClear(spawners: (() => unknown)[]): boolean {
+    const pool = this.world.pool;
+    for (const spawn of spawners) {
+      const before = new Set(pool.all.filter((b) => b.active));
+      spawn();
+      const fresh = pool.all.filter((b) => b.active && !before.has(b));
+      if (!fresh.some((b) => this.inBand(b))) return true;
+      for (const b of fresh) pool.release(b, 'cancel');
+    }
+    return false;
+  }
+
+  private inBand(b: Bullet): boolean {
+    return aabbInBand(bulletWorldAabb(this.world.box, b));
   }
 
   /** At the shine: aim at where the soul is right now, and fly there and beyond. */
@@ -113,9 +148,14 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
 
   // --- Axe swing: forms at a box corner, shines, swings in an arc around that corner -----
   private planAxe(p: ResolvedAttack): Shot[] {
-    const shots: Shot[] = [{ lead: p.windup!, fire: () => this.spawnAxe(p, this.pickCorner()) }];
+    const fire = () => {
+      const first = this.pickCorner();
+      // A corner whose resting axe would form in a HUD band (box shoved toward one) is skipped.
+      void this.spawnClear([0, 1, 2, 3].map((k) => () => this.spawnAxe(p, (first + k) % 4)));
+    };
+    const shots: Shot[] = [{ lead: p.windup!, fire }];
     // Sometimes a second corner, axeGap after the first shine.
-    if (this.rng() < p.double!) shots.push({ lead: p.windup! - this.rules.axeGap, fire: () => this.spawnAxe(p, this.pickCorner()) });
+    if (this.rng() < p.double!) shots.push({ lead: p.windup! - this.rules.axeGap, fire });
     return shots;
   }
 
@@ -154,6 +194,11 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
       onStep: (b: Bullet, dt: number) => {
         b.x = cx * this.world.box.halfWidth;
         b.y = cy * this.world.box.halfHeight;
+        // Still forming and the box was pushed so the gold axe would sit in a HUD band: it fades away.
+        if (!b.armed && this.inBand(b)) {
+          this.world.pool.release(b, 'cleared');
+          return;
+        }
         if (!b.armed || b.lifetime !== Infinity) return;
         const left = (end - b.rotation) * sign;
         b.rotation += sign * Math.min(left, speed * dt);
@@ -175,7 +220,8 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
     const opts = { edge: 'top' as const, count, speed: 0, offset: this.formOffset(this.rules.swordLength / 2), style };
     const gapSize = rainGapSlots(box.width, count, this.rules.swordWidth, this.rules.rainGap);
     const gapAt = this.rng();
-    return [{ lead: p.windup!, fire: () => void line(pool, box, { ...opts, gapSize, gapAt }) }];
+    // A row that would form in the top HUD band (box shoved up) is skipped.
+    return [{ lead: p.windup!, fire: () => void this.spawnClear([() => line(pool, box, { ...opts, gapSize, gapAt })]) }];
   }
 
   /** Each sword shines up to `jitter` s after the row's beat (nearly together), then drops fallGap later. */
