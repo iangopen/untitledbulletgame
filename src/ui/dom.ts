@@ -21,7 +21,7 @@ export function at<T extends HTMLElement | SVGElement>(el: T, x: number, y: numb
   return el;
 }
 
-export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose';
+export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose' | 'bolt';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -90,6 +90,11 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
     node = document.createElementNS(SVG_NS, 'path');
     const k = r;
     node.setAttribute('d', `M ${0.12 * k} ${-k} C ${0.35 * k} ${-0.45 * k} ${0.78 * k} ${-0.1 * k} ${0.7 * k} ${0.35 * k} A ${0.7 * k} ${0.62 * k} 0 0 1 ${-0.7 * k} ${0.35 * k} C ${-0.72 * k} ${-0.05 * k} ${-0.3 * k} ${-0.4 * k} ${0.12 * k} ${-k} Z`);
+  } else if (kind === 'bolt') {
+    // A lightning bolt: a slanted zigzag with a pointed bottom.
+    node = document.createElementNS(SVG_NS, 'path');
+    const k = r;
+    node.setAttribute('d', `M ${0.25 * k} ${-k} L ${-0.55 * k} ${0.12 * k} L ${-0.05 * k} ${0.12 * k} L ${-0.3 * k} ${k} L ${0.6 * k} ${-0.2 * k} L ${0.08 * k} ${-0.2 * k} L ${0.4 * k} ${-k} Z`);
   } else if (kind === 'rose') {
     // A rose: five round petals around a spiral heart, on a short stem with one leaf.
     node = document.createElementNS(SVG_NS, 'g');

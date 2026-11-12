@@ -20,6 +20,8 @@ export interface GameEvents {
    * phase that follows (for a breather) or the current one.
    */
   prismPhaseChanged: { owner: string; phase: 'ray' | 'mirrors' | 'blaster' | 'breather'; next: 'ray' | 'mirrors' | 'blaster' };
+  /** Volt: one phase per unlocked attack. */
+  voltPhaseChanged: { owner: string; phase: 'strike' | 'fork' | 'storm' | 'breather'; next: 'strike' | 'fork' | 'storm' };
   /** Rose: one phase per unlocked attack. */
   rosePhaseChanged: { owner: string; phase: 'volley' | 'vine' | 'bloom' | 'breather'; next: 'volley' | 'vine' | 'bloom' };
   /** Mortimer's phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */

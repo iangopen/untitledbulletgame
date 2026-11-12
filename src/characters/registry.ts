@@ -11,6 +11,8 @@ import { ulyssesConfig } from './ulysses/ulysses.config';
 import { Warden } from './warden/Warden';
 import { wardenConfig } from './warden/warden.config';
 import { Ember } from './ember/Ember';
+import { Volt } from './volt/Volt';
+import { voltConfig } from './volt/volt.config';
 import { emberConfig } from './ember/ember.config';
 import { theme } from '../render/theme';
 import { attackList, type CharacterConfig } from './config';
@@ -21,7 +23,7 @@ export interface CharacterEntry {
   color: number;
   maxLevel: number;
   /** Shape drawn for this character on the roster screen. */
-  shape: 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose';
+  shape: 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem' | 'flame' | 'rose' | 'bolt';
   create: (world: World) => CharacterHandle;
   /** The character's data file (title, description, bands); the menus read from it. */
   config: CharacterConfig<string, unknown>;
@@ -35,6 +37,7 @@ export const registry: readonly CharacterEntry[] = [
   { id: 'ulysses', name: 'Ulysses', color: theme.ulysses, maxLevel: ulyssesConfig.maxLevel, shape: 'shield', create: (w) => new Ulysses(w, 3), config: ulyssesConfig },
   { id: 'warden', name: 'The Warden', color: theme.warden, maxLevel: wardenConfig.maxLevel, shape: 'golem', create: (w) => new Warden(w, 4), config: wardenConfig },
   { id: 'ember', name: 'Ember', color: theme.ember, maxLevel: emberConfig.maxLevel, shape: 'flame', create: (w) => new Ember(w, 5), config: emberConfig },
+  { id: 'volt', name: 'Volt', color: theme.volt, maxLevel: voltConfig.maxLevel, shape: 'bolt', create: (w) => new Volt(w, 7), config: voltConfig },
 ];
 
 export const characterById = (id: string): CharacterEntry | undefined => registry.find((c) => c.id === id);

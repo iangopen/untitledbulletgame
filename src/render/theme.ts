@@ -50,6 +50,8 @@ export const theme = {
   prism: 0x3de8ff,
   /** Rose: deep rose pink, roster and profile only (RGB distance > 100 from the soul's red and KR magenta). */
   rose: 0xc8608c,
+  /** Volt: electric violet, roster and profile only (RGB distance > 100 from every projectile color, the gold, peach, cyan, rose and the soul's red; tested). */
+  volt: 0x9a5cff,
   /** Prism's refraction prism (a prop): light violet, kept distinct from blue projectiles (#2aa0ff). */
   prismProp: 0xb49cff,
   /** Mortimer: pale ice, darker and cooler than white projectiles and far lighter than blue ones. */
