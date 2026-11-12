@@ -14,7 +14,12 @@ export const theme = {
   textDim: 0x8a8a9a,
   /** Quiet text (hints, captions). */
   textMuted: 0x4a4a58,
-  hpFill: 0xf5e663,
+  /**
+   * HP bar: mint green. Away from every projectile and form color (white f4f4f8, blue 2e8bff,
+   * orange ff8a1c, KR magenta ff2bd6, gold forming e9cf6a), Ulysses' gold f2c230, damaging-wall
+   * lime 9dff3a, and red (the player).
+   */
+  hpFill: 0x4fe3a0,
   hpEmpty: 0x22222c,
   kr: 0xff2bd6,
   /** Projectile colors, one per type (combat/projectile.ts). Never red; fixed for every character. */
@@ -46,7 +51,10 @@ export const theme = {
   wallDamaging: 0x9dff3a,
   /** Ability bar: recharging fill (dim) and ready fill (bright). */
   abilityCharging: 0x5a5a6c,
-  abilityReady: 0xf4f4f8,
+  /** Ready: light grey, not the white of white projectiles. */
+  abilityReady: 0xb8b8c8,
+  /** Dev overlay shading the HUD bands. */
+  hudBand: 0xff2bd6,
   /** UI */
   locked: 0x2e2e3a,
   rule: 0x22222c,
@@ -95,4 +103,24 @@ export const line = {
   box: 2,
   /** Damaging walls. */
   danger: 6,
+} as const;
+
+/**
+ * HUD bands in the 1280x720 layout: the battle HUD lives only here, and NO attack may spawn or
+ * form (pre-active stage) inside them; bullets may only pass through (they draw over the HUD).
+ * Measured at level 20 (all three characters): everything spawns off screen except refracted rays
+ * (inside the box) and Ulysses' gold forming, which uses x 340-940, y 129-609. The box (x 415-865,
+ * y 204-534) stays centered between the bands.
+ */
+export const hud = {
+  /** Timer, profile boxes, roster summary, pause button. */
+  top: { y: 0, height: 120 },
+  /** HP bar, ability bar, controls hint. */
+  bottom: { y: 618, height: 102 },
+  timerY: 40,
+  /** Center of the 44 px profile row (72-116). */
+  profileY: 94,
+  /** Center of the HP and ability bars. */
+  barY: 650,
+  hintY: 696,
 } as const;

@@ -3,7 +3,7 @@ import type { World } from '../core/World';
 import type { Vec2, Wall } from '../core/Box';
 import { Bullet, bulletCircle, bulletExtent, bulletRect, bulletTriangle, rectCorners, sinceArmed } from '../combat/Bullet';
 import type { Circle, Rect, Triangle } from '../combat/Collision';
-import { line, rgb, theme } from './theme';
+import { hud, line, rgb, theme, VIEW } from './theme';
 import { renderScale } from './display';
 import { px } from '../tuning';
 import { BoxFrame, interpBullet, lerpPoint } from './interp';
@@ -268,6 +268,10 @@ export class BattleView {
   private drawOverlay(): void {
     const og = this.overlayGfx;
     og.clear();
+    if (this.showBands) {
+      og.fillStyle(theme.hudBand, 0.16);
+      for (const b of [hud.top, hud.bottom]) og.fillRect(0, b.y, VIEW.width, b.height);
+    }
     if (!this.showHitboxes) return;
     const { soul, pool } = this.world;
     const box = this.frame; // equals the simulated box: alpha is forced to 1 while the overlay is on
@@ -287,12 +291,15 @@ export class BattleView {
     og.strokeCircle(sw.x, sw.y, soul.hitRadius);
   }
 
-  /** HP bar rect in the 1280x720 layout, anchored to the default box (the HTML HUD aligns its text to it). */
+  /** HP bar rect in the 1280x720 layout: centered in the bottom HUD band (the HTML HUD aligns its text to it). */
   get hpBar(): { x: number; y: number; w: number; h: number } {
-    const d = this.world.box.defaults;
     const w = px(160);
-    return { x: Math.round(d.x - w / 2), y: Math.round(d.y + d.height / 2 + px(24)), w, h: 6 };
+    const h = 6;
+    return { x: Math.round(VIEW.cx - w / 2), y: Math.round(hud.barY - h / 2), w, h };
   }
+
+  /** Dev: shade the HUD bands (theme.hud) to check by eye that nothing spawns or forms there. */
+  showBands = false;
 
   /** Ability bar rect: same height as the HP bar, to its right past the HP value. */
   get abilityBar(): { x: number; y: number; w: number; h: number } {

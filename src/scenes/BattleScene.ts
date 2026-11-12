@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { World } from '../core/World';
 import { BattleView } from '../render/BattleView';
-import { VIEW, space, theme, toCss, type } from '../render/theme';
+import { VIEW, hud, space, theme, toCss, type } from '../render/theme';
 import { FixedLoop } from './FixedLoop';
 import { Director } from '../director/Director';
 import { TimerMode } from '../director/modes/TimerMode';
@@ -54,6 +54,8 @@ export class BattleScene extends Phaser.Scene {
   private pauseEl!: HTMLElement;
   private pauseItems: HTMLElement[] = [];
   private hudScreen!: HTMLElement;
+  /** HUD text below the canvas (bullets draw over it); see UiLayer under-layer. */
+  private hudUnder!: HTMLElement;
   /** Profile box per active character, lit on its attackStarted events. */
   private profiles = new Map<string, HTMLElement>();
   /** Dev verification: when each light-up happened (sim time + real time). */
@@ -85,12 +87,15 @@ export class BattleScene extends Phaser.Scene {
 
     this.buildHud();
     const kb = this.input.keyboard!;
+    // The battle camera clears transparent so the under-layer HUD shows beneath bullets.
+    this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     kb.on('keydown-ESC', () => (this.paused ? this.resume() : this.pause()));
     kb.on('keydown-UP', () => this.paused && this.setPause(this.pauseIndex - 1, true));
     kb.on('keydown-DOWN', () => this.paused && this.setPause(this.pauseIndex + 1, true));
     kb.on('keydown-ENTER', () => this.paused && this.choosePause(this.pauseIndex));
     if (import.meta.env.DEV) {
       kb.on('keydown-H', () => (this.view.showHitboxes = !this.view.showHitboxes));
+      kb.on('keydown-B', () => (this.view.showBands = !this.view.showBands));
       kb.on('keydown-BACKTICK', () => this.scene.start('Debug'));
       (window as unknown as Record<string, unknown>).__battle = {
         world: this.world, view: this.view, loop: this.loop, director: this.director, scene: this,
@@ -98,7 +103,7 @@ export class BattleScene extends Phaser.Scene {
     }
     // Back from Settings: show the HUD and pause menu again (still paused).
     const onResume = () => {
-      ui.show(this.hudScreen);
+      ui.show(this.hudScreen, this.hudUnder);
       this.renderPause();
     };
     this.events.on('resume', onResume);
@@ -113,8 +118,12 @@ export class BattleScene extends Phaser.Scene {
   private buildHud(): void {
     const screen = h('div');
     this.hudScreen = screen;
+    // HUD text goes in the under-layer (bullets draw over it); only the clickable pause button and
+    // the pause menu stay above the canvas. Everything sits in the HUD bands (theme.hud).
+    const under = h('div');
+    this.hudUnder = under;
     // HUD: countdown top center, roster summary top left, hp value beside the canvas bar, one quiet hint.
-    this.timerEl = at(h('div', 't-number mono'), VIEW.cx, 92);
+    this.timerEl = at(h('div', 't-number mono'), VIEW.cx, hud.timerY);
     const summary = registry
       .filter((e) => (this.roster[e.id] ?? 0) > 0)
       .map((e) => `${e.name} ${this.roster[e.id]}`)
@@ -123,25 +132,25 @@ export class BattleScene extends Phaser.Scene {
     const midY = bar.y + bar.h / 2;
     this.hpEl = at(h('div', 't-small mono dim'), bar.x + bar.w + 16, midY, 'left');
     // Mouse route to pause (Esc still works).
-    this.pauseBtn = at(h('div', 't-small hud-btn click', 'pause'), VIEW.width - space.lg, space.lg, 'right');
+    this.pauseBtn = at(h('div', 't-small hud-btn click', 'pause'), VIEW.width - space.lg, hud.timerY, 'right');
     this.pauseBtn.addEventListener('click', () => (this.paused ? this.resume() : this.pause()));
-    this.hintEl = at(h('div', 't-hint', `arrows move    space slow    ${this.world.ability ? `shift ${this.world.ability.name}    ` : ''}esc pause`), VIEW.cx, VIEW.height - 40);
+    this.hintEl = at(h('div', 't-hint', `arrows move    space slow    ${this.world.ability ? `shift ${this.world.ability.name}    ` : ''}esc pause`), VIEW.cx, hud.hintY);
     // Ability bar label (canvas draws the bar itself, from the ActiveAbility interface).
     const ab = this.world.ability;
     if (ab) {
       const a = this.view.abilityBar;
       this.abilityEl = at(h('div', 't-small dim', ab.name), a.x - 16, midY, 'right');
-      screen.append(this.abilityEl);
+      under.append(this.abilityEl);
       this.world.bus.on('abilityDenied', () => {
         this.view.deniedAt = this.view.now;
         replay(this.abilityEl!, 'nudge');
       });
     }
-    // Profile boxes: a centered row directly below the timer, one per active character.
+    // Profile boxes: a centered row directly below the timer (top HUD band), one per active character.
     const active = registry.filter((e) => (this.roster[e.id] ?? 0) > 0);
     const PROFILE = 44;
     const GAP = 12;
-    const rowY = 92 + type.number / 2 + space.sm + PROFILE / 2;
+    const rowY = hud.profileY;
     const rowW = active.length * PROFILE + (active.length - 1) * GAP;
     this.profiles.clear();
     active.forEach((e, i) => {
@@ -149,7 +158,7 @@ export class BattleScene extends Phaser.Scene {
       box.style.setProperty('--accent', toCss(e.color));
       box.append(shape(e.shape, e.color, 11));
       this.profiles.set(e.id, box);
-      screen.append(box);
+      under.append(box);
     });
     this.world.bus.on('attackStarted', (ev) => {
       const box = this.profiles.get(ev.owner);
@@ -160,14 +169,14 @@ export class BattleScene extends Phaser.Scene {
       if (import.meta.env.DEV) this.profileLog.push({ owner: ev.owner, attack: ev.attack, time: this.world.time, at: performance.now() });
     });
 
-    screen.append(
+    under.append(
       this.timerEl,
-      at(h('div', 't-small dim', summary || 'no opponents'), space.lg, space.lg, 'left'),
+      at(h('div', 't-small dim', summary || 'no opponents'), space.lg, hud.timerY, 'left'),
       at(h('div', 't-small dim', 'hp'), bar.x - 16, midY, 'right'),
       this.hpEl,
       this.hintEl,
-      this.pauseBtn,
     );
+    screen.append(this.pauseBtn);
 
     // Pause overlay (hidden until Esc). The backdrop swallows clicks so nothing reaches the battle.
     this.pauseEl = h('div');
@@ -182,7 +191,7 @@ export class BattleScene extends Phaser.Scene {
     });
     this.pauseEl.append(...this.pauseItems, at(h('div', 't-hint', '↑ ↓ choose    enter select    esc resume'), VIEW.cx, VIEW.height - 40));
     screen.append(this.pauseEl);
-    mountScreen(this, screen);
+    mountScreen(this, screen, under);
   }
 
   private pause(): void {
