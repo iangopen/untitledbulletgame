@@ -133,21 +133,25 @@ Arrows/WASD move, **Space** = slow movement (`SLOW_MULTIPLIER`), **Shift** = use
 - Input rules: scenes own state; the DOM only renders and forwards input. Hover and keyboard share one selection index per screen. Mousedown and wheel are prevented on the overlay, so clicks never take focus or scroll the page. Locked items use a not-allowed cursor and ignore the mouse. Battle movement stays keyboard-only; a quiet "pause" button gives a mouse route.
 
 ## Scene flow
-`Menu` (Timer mode; Wave mode shown as coming soon; Settings) → `Roster` (5 UCN-style slots, all five launch characters real: Prism, Mortimer, Ulysses, The Warden, Ember; ←/→ pick a slot, ↑/↓ change level, Z sets all to 0, X sets all to 20, Enter fights, Esc returns to the menu; shows total difficulty; below the slots the **loadout picker**: an active row and a passive row of icon + name options with one description line (the hovered option, else the focused row's equipped one); Tab / Shift+Tab move between the slots and the rows, ←/→ on a row equip (saved at once), ↑/↓ move rows, the mouse hovers and clicks; one selection state for the screen) → `Battle` (Director + TimerMode; HUD shows the countdown, HP/KR bar and roster summary; Esc pauses: resume / settings / restart / quit to roster) → `Results` (win/loss, time survived, HP left, levels, the loadout as 'active · passive'; R or Enter retries the same roster, Esc goes to the roster with levels kept).
+`Menu` (Custom; Wave mode shown as coming soon; Player; Debug; Settings) → `Custom` (scene key `Roster`) → `Battle` → `Results` (Retry | Custom). Player, Debug and Settings return to the menu.
+- **Custom** (`scenes/RosterScene.ts`): a UCN-style 10x5 grid of 50 portraits plus a side panel. **Grid-from-registry rule:** `menus/grid.ts` `buildGrid()` makes one slot per registered character in registry order, then black placeholder portraits up to `GRID_SLOTS` 50 (`???` / `Coming soon.`, level locked at 0). Adding a character only means registering it. Each real slot shows its shape in its color (dimmed at level 0) and `‹ level ›` beneath it. **Info panel:** hovering or selecting a slot shows the character's full name and short vague description, which live in its config (`title`, `description` in `<name>.config.ts`, required by `CharacterConfig`). Side panel: set all to 0, set all to 20, difficulty (total), Fight, Back. Mouse: hover selects, click ‹ › or wheel over a slot changes its level, click panel items. Keyboard: WASD move on the grid, arrows change the selected slot's level (↑ → up, ↓ ← down), Tab switches grid / panel (↑ ↓ / W S and Enter there), Z / X all 0 / 20, Enter fights, Esc to the menu. One selection index (0-49 grid, 50+ panel); level rules (`changeSlotLevel`, `setAllLevels`) are pure and tested. The grid opens with the last levels set or fought (`director/roster.ts` `rememberRoster` / `lastRoster`, page-session only), so `?roster=` levels appear there after its battle.
+- **Player** (`scenes/PlayerScene.ts`): the loadout picker (moved from the roster screen): active and passive rows of icon + name, one description line (hovered option, else the focused row's equipped one), Back. ↑ ↓ rows, ← → equip (saved at once through `menus/loadoutPick.ts` `pickAndSave`), Esc back; mouse hover and click. Laid out as sections under the title: the top-right corner (`CURRENCY_X`) and a section from `SHOP_Y` are reserved, empty, for the Phase 8 currency and shop. No prices shown.
+- **Debug** (`scenes/DebugScene.ts`, in every build): a sandbox with the template box and soul. Left: character list (from the registry) and that character's attacks (`attacksOf(entry)`, from its config bands, each with its unlock level). Right: level ‹ 1-20 ›, fire (`CharacterHandle.fireNow(attack, level)`; a locked attack nudges and says its unlock level), phase cycle (the chosen character runs its normal schedule at the chosen level, all others at 0), invincible, hitboxes, hud bands, clear bullets, Back. Tab / Shift+Tab move, PgUp / PgDn change, Enter uses; hover and click do the same. Esc or backtick returns to the menu. Every old dev key still works as a shortcut (list in the file header and the on-screen hint). A DOM readout shows bullets, step time, HP, loadout and the box. `window.__debug.sandbox` (choose, setLevel, fire, cycle, state) is for automated checks.
 Transitions are 140 ms fades (`SCENE_FADE_MS`) via `scenes/ui.ts` `go()`/`enter()`, and every screen follows the visual rules (rule 11). While a screen fades out it ignores input: `go()` switches the leaving scene's keyboard off and the DOM screen gets `.leaving` (no pointer events). `enter()` switches the keyboard back on, because the plugin outlives restarts.
 Battle HUD: profile boxes, a centered row of 44 px boxes directly below the timer in the top HUD band, one per active character with its shape in its color (icon at 55% opacity). **Profile flash rule:** on that character's `attackStarted` only the box border and the icon light (border to the accent, icon to full opacity) and fade back over 450 ms. The box never has a fill, so bullets drawn under the row never change color. Pause skips the fixed step and `FixedLoop.resync()` on resume, so no time is caught up.
 
 Dev shortcuts:
-- `?roster=prism:12` (comma-separated `id:level`, clamped, unknown ids ignored) skips the menu straight into battle. It applies once per page load and works in production too.
+- `?roster=prism:12` (comma-separated `id:level`, clamped, unknown ids ignored) skips the menu straight into battle and sets those levels on the Custom grid. It applies once per page load and works in production too.
 - `?duration=<s>` shortens timer mode. Dev builds only; it's stripped from production.
-- In dev: H toggles the hitbox overlay; backtick opens DebugScene (Home / End cycle the equipped active / passive there).
+- In dev: H toggles the hitbox overlay in battle; backtick in battle opens Debug (Debug is also on the main menu in every build; Home / End cycle the equipped active / passive there).
 - Every build: F3 toggles the performance overlay.
 
 ## Folder layout
 ```
 src/
   main.ts
-  scenes/      Menu, Roster, Shop, Battle, Results, Settings
+  scenes/      Menu, Roster (Custom grid), Player, Debug, Battle, Results, Settings
+  menus/       grid (Custom grid from the registry), loadoutPick (Player screen picks)
   settings/    settings (data + storage), refresh (rates, caps), store (live)
   core/        Soul, Box, Clock, EventBus
   combat/      Bullet, BulletPool, Collision, projectile (types), offscreen, patterns/
@@ -231,6 +235,13 @@ src/
 Live: https://iangopen.github.io/untitledbulletgame/ (full loop: menu → roster → battle → results; `?roster=prism:12` jumps straight into a battle). Deployed by `.github/workflows/deploy.yml` on every push to main: npm ci, npm test, npm run build, then Pages. Actions are pinned to Node-24 versions (checkout v7, setup-node v7, configure-pages v6, upload-pages-artifact v5, deploy-pages v5).
 
 ### Real (built and verified)
+**Menus reorganized (Custom grid, Player, Debug sandbox):**
+- Tests: 293 (new: grid is 5 registry characters then 45 placeholders, a sixth registered character takes slot 6, titles/descriptions from configs, levels clamped 0-20 with placeholders locked, set all, 2D move with wrap, `?roster=` levels remembered for the grid, attack lists with unlock levels, Player picks saved and read back). Build passes.
+- Browser (dev), mouse only: menu → Custom; ‹ › clicks (Prism 1 → 3), wheel (Mortimer 0 → 3), hover showed each of the five descriptions and the placeholder's `??? / Coming soon.`; set all 20 (difficulty 100) and 0; Back; Player: shield + afterglow clicked, saved as `{"v":1,"active":"shield","passive":"afterglow"}`; Fight with Prism 1: the battle's ability was shield and i-frames 1.5 s; Results showed `shield · afterglow`.
+- Keyboard only: Custom WASD + arrows (Mortimer 0 → 2), a placeholder ignored ↑, X / Z, Tab panel, Enter on set all / Back; Player → blink + quick charge saved; Settings and back; Wave mode stays on the menu; Debug opened.
+- Debug sandbox: fired Prism volley at 20 and 1 (keyboard: 8 triangles each), Mortimer snowfall, Ulysses summon, Warden punch (box shoved to x 520), Ember embers at 1 (mouse), then beam / blizzard / axe / toss / wildfire at 20 (64 bullets, box tossed to x0.80). Phase cycle Prism 20 by mouse for 20 s: wall@34.8 breather@42.8 ray@43.8 breather@51.8 wall@52.8, 36 attacks; off returned Prism to 0. Toggles, clear bullets, Back and the `1` shortcut work. `?roster=prism:12,ember:3` → battle → quit showed those levels on the grid. No console errors.
+- Found and fixed while verifying: the Debug level row ignored the mouse (missing the pointer-events class); hint lines overlapped the HP bar; the results hint still said roster.
+
 **Phase 1 (Feel):** fixed 60 Hz Clock fed by `performance.now()`; Box with rotation-ready `toWorld`/`toLocal`; Soul with 8-way and slow movement, HP, i-frames, and KR (drains 8 HP/s through i-frames, KR hits respect and grant i-frames, can't drop HP below 1; unchanged).
 
 **Phase 2 (Bullets):** Bullet (circle/rect/triangle/beam; hooks; `gen`/`flags`/`color` fields), BulletPool (1024, graceful overflow), patterns line/fan/ring/aimed, exact hitboxes from shared geometry, JSAB-style BattleView with spawn pop, despawn ghosts, hit flash and shake, dev hitbox overlay (H), dev DebugScene (backtick).
@@ -438,6 +449,9 @@ Live: https://iangopen.github.io/untitledbulletgame/ (full loop: menu → roster
 - Box defaults to confirm: soul rides the box, controls screen-relative, wall damage 5 per contact, min box 60x60
 - Box events fire on request (target + duration), not on completion; add completion events if combos need them
 - Wave mode (Phase 7): the menu shows it as coming soon; it needs a `BattleMode` that also loads waves
+- Custom keyboard: arrows change levels and WASD move (arrows were asked to change levels); a resting mouse cursor over an item selects it when the screen appears (hover = selection, by design). Ian to judge.
+- Debug sandbox level is 1-20 (0 is pointless for firing); the Debug wheel steps one level per wheel gesture. Debug's BattleView isn't prewarmed (textures build on first sight; fine for a dev tool).
+- The roster scene's key stays `Roster` (labelled Custom) to keep scene data plumbing unchanged.
 - Scoring; results show time, HP and levels only
 - In-battle level changes for tuning were dropped with the [ ] keys; use the roster screen or `?roster=`
 - KR source, wave mode design, shop currency, timer length, scoring, characters 2-5, game name
