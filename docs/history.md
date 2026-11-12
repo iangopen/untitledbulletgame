@@ -55,3 +55,7 @@ Found: the soul disc texture was keyed by radius (45 mid-battle builds once the 
 ## 2026-11-11 - Box slides under the soul, gentler toss, Ember fire visuals
 After play-testing: box moves, turns, resizes and toss scales keep the soul's world position (only walls that reach it push it); the soul never scales; the toss bottoms out at 0.80 (was 0.5). Ember's embers, sweep walls and rings are flame shapes (ring tongues share geometry for drawing and collision), flicker is alpha only, and a blinking fire icon warns 0.6 s before each ring.
 Screenshot tooling: freezing game.loop mid scene-fade leaves the camera dimmed; reset cameras.main.fadeEffect before capturing.
+
+## 2026-11-12 - Abilities and the loadout picker
+Actives shield, slow time (world.timeScale; the soul and battle timer stay real-time), blink; passives thick skin, afterglow, quick charge, steady through one equipLoadout hook; roster loadout picker saved under ubg.loadout.v1; results show the loadout. Vitest timeout raised to 20 s after two heavy simulations timed out under load.
+Screenshot tooling: freezing the loop also freezes a running camera flash; reset flashEffect and fadeEffect before capturing. Roster keys pressed during the scene fade are ignored by design; wait for the fade.
