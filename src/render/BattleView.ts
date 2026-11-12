@@ -272,6 +272,15 @@ export class BattleView {
       }
       return;
     }
+    if (b.shape === 'rect') {
+      // A line look as thick as the short side, stretched along the long side (LookCache.bullet).
+      const look = this.looks.line(2 * Math.min(b.a, b.b));
+      const along = b.b > b.a;
+      const len = 2 * (along ? b.b : b.a) * s;
+      const img = core.next(look).setPosition(p.x, p.y).setRotation(rot + (along ? Math.PI / 2 : 0)).setScale(len / look.size, s / look.k).setTint(color);
+      if (alpha < 1) img.setAlpha(alpha);
+      return;
+    }
     const look = this.looks.bullet(b);
     const k = b.shape === 'circle' ? (s * b.a) / look.size : s;
     const img = core.next(look).setPosition(p.x, p.y).setRotation(rot).setScale(k / look.k).setTint(color);

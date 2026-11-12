@@ -83,6 +83,10 @@ export class LookCache {
   bullet(b: Bullet): Look {
     // A ring is drawn as stretched chord segments of a line look `b` thick (see BattleView).
     if (b.shape === 'ring') return this.line(b.b);
+    // A rect is one line look as thick as its short side, stretched along its long side (see
+    // BattleView): one texture per thickness at any length (box-tall warning columns, lasers), and
+    // its long edges stay exact.
+    if (b.shape === 'rect') return this.line(2 * Math.min(b.a, b.b));
     if (b.shape === 'circle') {
       // Size buckets: radius rounded up to the next bucket; the sprite scales it down to the exact radius.
       const r = Math.max(0.5, b.a);
