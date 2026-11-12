@@ -39,9 +39,9 @@ describe('HUD bands', () => {
     expect(w.box.y + w.box.halfHeight).toBeLessThan(hud.bottom.y);
   });
 
-  it('all three characters at 20 for 40 s: no spawn or gold-forming stage lands in a HUD band', () => {
+  it('all four characters at 20 for 40 s (box shoved and spun): no spawn or gold-forming stage lands in a HUD band', () => {
     const w = new World(VIEW.cx, VIEW.cy + 9);
-    const d = new Director(w, { prism: 20, mortimer: 20, ulysses: 20 }, new TimerMode(60));
+    const d = new Director(w, { prism: 20, mortimer: 20, ulysses: 20, warden: 20 }, new TimerMode(60));
     const seen = new Set<Bullet>();
     let spawns = 0, onScreenSpawns = 0, spawnInBand = 0, goldSteps = 0, goldInBand = 0, passingInBand = 0;
     // The Director's step, split so spawns are measured where they spawn (before the world moves them).
@@ -54,7 +54,8 @@ describe('HUD bands', () => {
     }
     function measure(): void {
       for (const b of w.pool.all) {
-        if (!b.active) continue;
+        // The Warden's fists are objects, not attacks (they never collide); his test keeps them clear too.
+        if (!b.active || b.decor) continue;
         const a = screenAabb(w, b);
         if (!seen.has(b)) {
           seen.add(b);
@@ -70,7 +71,7 @@ describe('HUD bands', () => {
       for (const b of [...seen]) if (!b.active) seen.delete(b);
     }
     // eslint-disable-next-line no-console
-    console.log(`HUD bands, all at 20 for 40 s: ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band`);
+    console.log(`HUD bands, all four at 20 for 40 s: ${spawns} spawns (${onScreenSpawns} on screen), ${spawnInBand} in a band; ${goldSteps} gold bullet-steps, ${goldInBand} in a band; ${passingInBand} active bullet-steps passing through a band`);
     expect(spawnInBand).toBe(0);
     expect(goldInBand).toBe(0);
   });

@@ -2,6 +2,7 @@ import { Ulysses } from '../characters/ulysses/Ulysses';
 import { SWORD_FLAGS, SWORD_FORM } from '../characters/ulysses/ulysses.config';
 import { installInteractions } from '../director/interactions';
 import { Mortimer } from '../characters/mortimer/Mortimer';
+import { Warden } from '../characters/warden/Warden';
 import Phaser from 'phaser';
 import { PROJECTILE_TYPES } from '../combat/projectile';
 import { World } from '../core/World';
@@ -27,6 +28,7 @@ import type { CharacterHandle } from '../characters/Character';
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
  * Mortimer (level 20 params, fired now from off screen): J snowfall · K snowball roll · L blizzard
  * Ulysses (level 20 params): U summon · Y axe swing · O sword rain
+ * The Warden (level 20 params): , punch (and the return) · / spin
  * Combos: X sword through a refraction prism (Prism + Ulysses) · . toggle Mortimer's blizzard phase (swords sync)
  */
 export class DebugScene extends Phaser.Scene {
@@ -46,6 +48,7 @@ export class DebugScene extends Phaser.Scene {
   private prism!: CharacterHandle;
   private mortimer!: Mortimer;
   private ulysses!: Ulysses;
+  private warden!: Warden;
   private blizzard = false;
 
   constructor() {
@@ -62,6 +65,7 @@ export class DebugScene extends Phaser.Scene {
     this.prism = characterById('prism')!.create(this.world);
     this.mortimer = new Mortimer(this.world, 2);
     this.ulysses = new Ulysses(this.world, 3);
+    this.warden = new Warden(this.world, 4);
     // Every combo rule, as if all characters were active, so X and . can show them.
     const offCombos = installInteractions(this.world, new Set(registry.map((e) => e.id)));
     this.blizzard = false;
@@ -69,6 +73,7 @@ export class DebugScene extends Phaser.Scene {
       this.prism.dispose();
       this.mortimer.dispose();
       this.ulysses.dispose();
+      this.warden.dispose();
       offCombos();
     });
     this.loop = new FixedLoop(this);
@@ -77,7 +82,7 @@ export class DebugScene extends Phaser.Scene {
     this.readout = this.add.text(16, 12, '', { ...mono, color: toCss(theme.text) }).setResolution(renderScale());
     this.boxText = this.add.text(16, 80, '', { ...mono, color: toCss(theme.textDim) }).setResolution(renderScale());
     this.add
-      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  U/Y/O ulysses  X . combos  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
+      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  U/Y/O ulysses  , / warden  X . combos  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
       .setOrigin(0.5)
       .setResolution(renderScale());
 
@@ -134,6 +139,8 @@ export class DebugScene extends Phaser.Scene {
       U: () => this.ulysses.fireNow('summon', 20),
       Y: () => this.ulysses.fireNow('axe', 20),
       O: () => this.ulysses.fireNow('rain', 20),
+      COMMA: () => this.warden.fireNow('punch', 20),
+      FORWARD_SLASH: () => this.warden.fireNow('spin', 20),
       X: () => this.prismCombo(),
       PERIOD: () => {
         this.blizzard = !this.blizzard;
@@ -155,6 +162,7 @@ export class DebugScene extends Phaser.Scene {
       prism: () => this.prism,
       mortimer: () => this.mortimer,
       ulysses: () => this.ulysses,
+      warden: () => this.warden,
       prismCombo: () => this.prismCombo(),
       setInvincible: (v: boolean) => (this.invincible = v),
     };
@@ -164,7 +172,7 @@ export class DebugScene extends Phaser.Scene {
   private prismCombo(): void {
     const w = this.world;
     if (!w.props.some((p) => p.refracts)) {
-      w.props.push({ shape: 'triangle', x: 0, y: 0, r: px(28), rotation: -Math.PI / 2, color: theme.prism, refracts: true });
+      w.props.push({ shape: 'triangle', x: 0, y: 0, r: px(28), rotation: -Math.PI / 2, color: theme.prismProp, refracts: true });
     }
     w.pool.spawn({
       shape: 'composite', form: SWORD_FORM, a: 0, x: -w.box.halfWidth - px(40), y: 0, vx: px(180), faceVelocity: true,
@@ -246,6 +254,7 @@ export class DebugScene extends Phaser.Scene {
       if (this.invincible) w.soul.iframes = Math.max(w.soul.iframes, 2 * STEP);
       this.stepChaos(dt);
       this.prism.tick(dt);
+      this.warden.tick(dt);
       w.step(input, dt);
     });
     if (this.loop.lastStepMs > 0) {

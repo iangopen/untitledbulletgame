@@ -21,7 +21,7 @@ export function at<T extends HTMLElement | SVGElement>(el: T, x: number, y: numb
   return el;
 }
 
-export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield';
+export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman' | 'shield' | 'golem';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -48,6 +48,12 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
     node = document.createElementNS(SVG_NS, 'path');
     const w = r * 0.82;
     node.setAttribute('d', `M ${-w} ${-r * 0.85} L ${w} ${-r * 0.85} L ${w} ${r * 0.05} Q ${w} ${r * 0.7} 0 ${r} Q ${-w} ${r * 0.7} ${-w} ${r * 0.05} Z`);
+  } else if (kind === 'golem') {
+    // Stone golem: a blocky head on broad shoulders with two heavy fists (flat rocky blocks).
+    node = document.createElementNS(SVG_NS, 'path');
+    const k = r;
+    const rect = (x: number, y: number, w: number, hh: number) => `M ${x * k} ${y * k} h ${w * k} v ${hh * k} h ${-w * k} Z `;
+    node.setAttribute('d', rect(-0.3, -0.95, 0.6, 0.45) + rect(-0.62, -0.42, 1.24, 0.82) + rect(-0.98, -0.3, 0.3, 0.9) + rect(0.68, -0.3, 0.3, 0.9) + rect(-0.5, 0.48, 0.38, 0.47) + rect(0.12, 0.48, 0.38, 0.47));
   } else if (kind === 'circle') {
     node = document.createElementNS(SVG_NS, 'circle');
     node.setAttribute('r', String(r));
