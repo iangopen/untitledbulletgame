@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { resolveLevel, validateConfig } from '../config';
-import { SWORD_FLAGS, ulyssesConfig } from './ulysses.config';
+import { SWORD_FLAGS, SWORD_FORM, ulyssesConfig } from './ulysses.config';
 import { Ulysses } from './Ulysses';
 import { Mortimer } from '../mortimer/Mortimer';
 import { World } from '../../core/World';
 import { STEP } from '../../core/Clock';
-import { Bullet, bulletRect, rectCorners } from '../../combat/Bullet';
+import { Bullet, rectCorners } from '../../combat/Bullet';
+import { bulletPrimitives, type Primitive } from '../../combat/composite';
 import { bulletHitsCircle } from '../../combat/hitTest';
 import { interpBullet } from '../../render/interp';
 import { registry } from '../registry';
@@ -22,15 +23,15 @@ describe('Ulysses config', () => {
     expect(validateConfig(ulyssesConfig)).toEqual([]);
     expect(registry[2]).toMatchObject({ id: 'ulysses', shape: 'shield', maxLevel: 20 });
   });
-  it('summon 1-20; swipe joins at 6; rain at 15', () => {
+  it('summon 1-20; axe joins at 6; rain at 15', () => {
     for (const l of [1, 5]) expect(attacksAt(l)).toEqual(['summon']);
-    for (const l of [6, 14]) expect(attacksAt(l)).toEqual(['summon', 'swipe']);
-    for (const l of [15, 20]) expect(attacksAt(l)).toEqual(['rain', 'summon', 'swipe']);
+    for (const l of [6, 14]) expect(attacksAt(l)).toEqual(['axe', 'summon']);
+    for (const l of [15, 20]) expect(attacksAt(l)).toEqual(['axe', 'rain', 'summon']);
   });
   it('difficulty never decreases with level, per parameter', () => {
-    const up = ['damage', 'speed', 'count', 'coverage', 'double'];
-    const down = ['cooldown', 'grow', 'windup', 'stagger', 'fallGap'];
-    for (const atk of ['summon', 'swipe', 'rain'] as const) {
+    const up = ['damage', 'speed', 'count', 'arc', 'reach', 'double'];
+    const down = ['cooldown', 'grow', 'windup', 'jitter', 'fallGap'];
+    for (const atk of ['summon', 'axe', 'rain'] as const) {
       let prev: Record<string, number> | undefined;
       for (let l = 1; l <= 20; l++) {
         const a = resolveLevel(ulyssesConfig, l).attacks[atk];
@@ -48,15 +49,22 @@ describe('Ulysses config', () => {
   });
 });
 
-/** Every pre-active bullet's whole drawn shape (at full size) is outside the box? */
+/** Every primitive of the bullet at full size (as it will be at the shine) is outside the box (AABB test, conservative). */
 function formedOutside(w: World, b: Bullet): boolean {
   const full = interpBullet(b, 1, new Bullet());
-  full.armed = true; // full size, as it will be at the shine
-  const pts = rectCorners(bulletRect(full, { x: 0, y: 0, hw: 0, hh: 0, rotation: 0 }), [0, 1, 2, 3].map(() => ({ x: 0, y: 0 })));
-  // Outside = the rect doesn't overlap the box (separating axis on the box's own axes is enough for
-  // swords that lie along or point straight at a wall, which is how they form).
-  return pts.every((p) => p.x < -w.box.halfWidth) || pts.every((p) => p.x > w.box.halfWidth)
-    || pts.every((p) => p.y < -w.box.halfHeight) || pts.every((p) => p.y > w.box.halfHeight);
+  full.armed = true; // full size, not growing in
+  return !bulletPrimitives(full, (p) => {
+    const a = primAabb(p);
+    return a.x1 > -w.box.halfWidth && a.x0 < w.box.halfWidth && a.y1 > -w.box.halfHeight && a.y0 < w.box.halfHeight;
+  });
+}
+
+function primAabb(p: Primitive): { x0: number; y0: number; x1: number; y1: number } {
+  if (p.kind === 'circle') return { x0: p.c.x - p.c.r, x1: p.c.x + p.c.r, y0: p.c.y - p.c.r, y1: p.c.y + p.c.r };
+  const pts = p.kind === 'tri'
+    ? [{ x: p.t.ax, y: p.t.ay }, { x: p.t.bx, y: p.t.by }, { x: p.t.cx, y: p.t.cy }]
+    : rectCorners(p.r, [0, 1, 2, 3].map(() => ({ x: 0, y: 0 })));
+  return { x0: Math.min(...pts.map((q) => q.x)), x1: Math.max(...pts.map((q) => q.x)), y0: Math.min(...pts.map((q) => q.y)), y1: Math.max(...pts.map((q) => q.y)) };
 }
 
 function runUlysses(level: number, seconds: number, input: (w: World) => MoveInput = () => STILL) {
@@ -76,7 +84,7 @@ function runUlysses(level: number, seconds: number, input: (w: World) => MoveInp
     for (const b of w.pool.all) {
       if (!b.active || seen.has(b)) continue;
       seen.add(b);
-      const atk = !(b.flags & SWORD_FLAGS.sword) ? 'swipe' : b.onStep ? 'rain' : 'summon';
+      const atk = !(b.flags & SWORD_FLAGS.sword) ? 'axe' : b.onStep ? 'rain' : 'summon';
       counts[atk] = (counts[atk] ?? 0) + 1;
       if (!formedOutside(w, b)) formedInside++;
     }
@@ -88,7 +96,7 @@ function runUlysses(level: number, seconds: number, input: (w: World) => MoveInp
     for (const b of w.pool.all) {
       if (!b.active || !b.armed || shone.has(b)) continue;
       shone.add(b);
-      const atk = !(b.flags & SWORD_FLAGS.sword) ? 'swipe' : b.onStep ? 'rain' : 'summon';
+      const atk = !(b.flags & SWORD_FLAGS.sword) ? 'axe' : b.onStep ? 'rain' : 'summon';
       // Within a step either side (a bullet's age starts counting on its spawn step).
       if (![-2 * STEP, 0, 1.5 * STEP].some((d) => u.phaseAt(w.time + d).phase === atk)) wrongPhase++;
     }
@@ -102,8 +110,8 @@ describe('Ulysses behaviour', () => {
   it('phases, counts, gold never hurts, gold forms outside the box (L1, L10, L20 over 40 s)', () => {
     const expected: Record<number, string[]> = {
       1: ['summon@0.0', 'breather@8.0', 'summon@9.0'],
-      10: ['summon@0.0', 'breather@8.0', 'swipe@9.0', 'breather@17.0', 'summon@18.0'],
-      20: ['summon@0.0', 'breather@8.0', 'swipe@9.0', 'breather@17.0', 'rain@18.0', 'breather@26.0', 'summon@27.0'],
+      10: ['summon@0.0', 'breather@8.0', 'axe@9.0', 'breather@17.0', 'summon@18.0'],
+      20: ['summon@0.0', 'breather@8.0', 'axe@9.0', 'breather@17.0', 'rain@18.0', 'breather@26.0', 'summon@27.0'],
     };
     for (const level of [1, 10, 20]) {
       const r = runUlysses(level, 40);
@@ -113,7 +121,7 @@ describe('Ulysses behaviour', () => {
       expect(r.formedInside).toBe(0);
       expect(r.wrongPhase).toBe(0);
       expect(r.counts.summon).toBeGreaterThan(0);
-      if (level >= 6) expect(r.counts.swipe).toBeGreaterThan(0);
+      if (level >= 6) expect(r.counts.axe).toBeGreaterThan(0);
       if (level >= 15) expect(r.counts.rain).toBeGreaterThan(0);
     }
   });
@@ -171,35 +179,89 @@ describe('Ulysses behaviour', () => {
     expect(w.soul.hp).toBeLessThan(w.soul.maxHp);
   });
 
-  it('side swipe: the drawn blade is the hitbox through the whole sweep, also in a rotated box', () => {
-    for (const rot of [0, Math.PI / 6]) {
+  it('axe: pivots on its corner and the drawn axe is the hitbox through the whole arc (rotated, resized box)', () => {
+    for (const [rot, resize] of [[0, false], [Math.PI / 6, false], [0, true]] as const) {
       const w = new World(640, 369);
       w.box.rotateTo(rot, 0);
       w.step(STILL, STEP);
       const u = new Ulysses(w, 3);
-      u.fireNow('swipe', 20);
-      const blade = w.pool.all.find((b) => b.active)!;
-      expect(blade.flags & SWORD_FLAGS.sword).toBe(0);
+      u.fireNow('axe', 20);
+      const axe = w.pool.all.find((b) => b.active)!;
+      expect(axe.flags & SWORD_FLAGS.sword).toBe(0);
+      const R = resolveLevel(ulyssesConfig, 20).attacks.axe!.reach!;
+      const cx = Math.sign(axe.x);
+      const cy = Math.sign(axe.y);
       let steps = 0;
+      let swept = 0;
+      let last = axe.rotation;
       const drawn = new Bullet();
-      while (blade.active && steps < 600) {
+      while (axe.active && steps < 600) {
+        if (resize && steps === 70) w.box.resizeTo(300, 240, 0.4, 'linear');
         w.step(STILL, STEP);
         w.soul.iframes = 1;
         steps++;
-        if (!blade.armed || !blade.active) continue;
-        // Drawn rect (alpha 1) == collision rect; probe just inside / outside a long edge's middle.
-        const r = bulletRect(blade, { x: 0, y: 0, hw: 0, hh: 0, rotation: 0 });
-        const d = bulletRect(interpBullet(blade, 1, drawn), { x: 0, y: 0, hw: 0, hh: 0, rotation: 0 });
-        expect(d).toEqual(r);
-        const rr = r.rotation ?? 0;
-        const nx = -Math.sin(rr);
-        const ny = Math.cos(rr);
-        expect(bulletHitsCircle(blade, { x: r.x + nx * (r.hh + 0.4), y: r.y + ny * (r.hh + 0.4), r: 0.5 })).toBe(true);
-        expect(bulletHitsCircle(blade, { x: r.x + nx * (r.hh + 0.6), y: r.y + ny * (r.hh + 0.6), r: 0.5 })).toBe(false);
-        // Its world rotation follows the box.
-        expect(r.rotation === 0 || r.rotation === Math.PI / 2).toBe(true);
+        if (!axe.active) break;
+        // Pivot = the current corner, also while the box resizes.
+        expect(axe.x).toBeCloseTo(cx * w.box.halfWidth, 9);
+        expect(axe.y).toBeCloseTo(cy * w.box.halfHeight, 9);
+        if (!axe.armed) continue;
+        swept += Math.abs(axe.rotation - last);
+        last = axe.rotation;
+        // Drawn primitives (alpha 1) == collision primitives.
+        const a: string[] = [];
+        const d: string[] = [];
+        bulletPrimitives(axe, (p) => void a.push(JSON.stringify(p)));
+        bulletPrimitives(interpBullet(axe, 1, drawn), (p) => void d.push(JSON.stringify(p)));
+        expect(d).toEqual(a);
+        // Probe the handle's side at mid-length, rotated with the axe: 0.4 px out hits, 0.6 px misses.
+        const c = Math.cos(axe.rotation);
+        const sn = Math.sin(axe.rotation);
+        const probe = (lx: number, ly: number) => ({ x: axe.x + lx * c - ly * sn, y: axe.y + lx * sn + ly * c, r: 0.5 });
+        expect(bulletHitsCircle(axe, probe(R / 2, 3.4))).toBe(true);
+        expect(bulletHitsCircle(axe, probe(R / 2, 3.6))).toBe(false);
+        expect(bulletHitsCircle(axe, probe(R / 2, -3.6))).toBe(false);
       }
-      expect(steps).toBeGreaterThan(60);
+      expect(swept).toBeCloseTo(resolveLevel(ulyssesConfig, 20).attacks.axe!.arc!, 2);
+    }
+  });
+
+  it('sword rain: 3x the swords, near-simultaneous shines, and an opening wider than the soul in every row', () => {
+    for (const level of [15, 20]) {
+      const w = new World(640, 369);
+      const u = new Ulysses(w, 3);
+      const p = resolveLevel(ulyssesConfig, level).attacks.rain!;
+      const rows: { count: number; shineSpread: number; fallSpread: number; minGap: number }[] = [];
+      for (let row = 0; row < 12; row++) {
+        w.pool.clear();
+        u.fireNow('rain', level);
+        const swords = w.pool.all.filter((b) => b.active);
+        // Narrowest gap: sort by x, crossguard edges at x +- swordWidth.
+        const xs = swords.map((b) => b.x).sort((a, b) => a - b);
+        const hw = ulyssesConfig.rules.swordWidth;
+        const gaps = xs.slice(1).map((x, i) => x - xs[i]! - 2 * hw);
+        const widest = Math.max(...gaps, xs[0]! - hw + w.box.halfWidth, w.box.halfWidth - xs[xs.length - 1]! - hw);
+        const shine = new Map<Bullet, number>();
+        const fall = new Map<Bullet, number>();
+        for (let i = 0; i < 240; i++) {
+          w.step(STILL, STEP);
+          w.soul.iframes = 1;
+          for (const b of swords) {
+            if (b.armed && !shine.has(b)) shine.set(b, w.time);
+            if (b.vy > 0 && !fall.has(b)) fall.set(b, w.time);
+          }
+        }
+        const sp = (m: Map<Bullet, number>) => Math.max(...m.values()) - Math.min(...m.values());
+        rows.push({ count: swords.length, shineSpread: sp(shine), fallSpread: sp(fall), minGap: widest });
+      }
+      const soulD = 2 * w.soul.hitRadius;
+      // eslint-disable-next-line no-console
+      console.log(`rain L${level}: ${p.count} slots, ${rows[0]!.count} swords per row (was ${level === 15 ? 6 : 9}); fall start spread max ${Math.max(...rows.map((r) => r.fallSpread)).toFixed(3)} s; narrowest per-row opening ${Math.min(...rows.map((r) => r.minGap)).toFixed(1)} px vs soul diameter ${soulD} px`);
+      for (const r of rows) {
+        expect(r.minGap).toBeGreaterThan(soulD);
+        expect(r.minGap).toBeGreaterThanOrEqual(ulyssesConfig.rules.rainGap - 1e-9);
+        expect(r.fallSpread).toBeLessThanOrEqual(p.jitter! + STEP + 1e-9);
+      }
+      expect(p.count).toBe(level === 15 ? 18 : 27);
     }
   });
 });
@@ -213,9 +275,9 @@ describe('combos', () => {
       // Probe: a sword at a refraction prop / a blizzard phase, and see what reacts.
       w.bus.on('comboTriggered', (e) => got.push(e.id));
       w.props.push({ shape: 'triangle', x: 0, y: 0, r: 60, rotation: 0, color: 0, refracts: true });
-      w.pool.spawn({ shape: 'beam', a: 60, b: 7, x: -1, y: 0, vx: 100, faceVelocity: true, damage: 1, owner: 'ulysses', flags: SWORD_FLAGS.sword, noPop: true });
+      w.pool.spawn({ shape: 'composite', form: SWORD_FORM, a: 0, x: -1, y: 0, vx: 100, faceVelocity: true, damage: 1, owner: 'ulysses', flags: SWORD_FLAGS.sword, noPop: true });
       w.bus.emit('mortimerPhaseChanged', { owner: 'mortimer', phase: 'blizzard', next: 'blizzard' });
-      w.pool.spawn({ shape: 'beam', a: 60, b: 7, x: 300, y: 300, damage: 1, owner: 'ulysses', flags: SWORD_FLAGS.sword, noPop: true, armDelay: 2 });
+      w.pool.spawn({ shape: 'composite', form: SWORD_FORM, a: 0, x: 300, y: 300, damage: 1, owner: 'ulysses', flags: SWORD_FLAGS.sword, noPop: true, armDelay: 2 });
       w.step(STILL, STEP);
       d.dispose();
       return [...new Set(got)].sort();
@@ -235,9 +297,9 @@ describe('combos', () => {
     const events: { t: number; count: number }[] = [];
     w.bus.on('comboTriggered', (e) => events.push({ t: w.time, count: e.count }));
     w.props.push({ shape: 'triangle', x: 0, y: 0, r: 42, rotation: -Math.PI / 2, color: 0, refracts: true });
-    w.pool.spawn({ shape: 'beam', a: 60, b: 7.5, x: -300, y: 0, vx: 270, faceVelocity: true, damage: 10, owner: 'ulysses', kind: 'white', flags: SWORD_FLAGS.sword, noPop: true });
+    w.pool.spawn({ shape: 'composite', form: SWORD_FORM, a: 0, x: -300, y: 0, vx: 270, faceVelocity: true, damage: 10, owner: 'ulysses', kind: 'white', flags: SWORD_FLAGS.sword, noPop: true });
     // A gold sword flying through the prism does nothing (it is still gold the whole way).
-    w.pool.spawn({ shape: 'beam', a: 60, b: 7.5, x: 0, y: -300, vy: 270, faceVelocity: true, damage: 10, owner: 'ulysses', flags: SWORD_FLAGS.sword, noPop: true, armDelay: 5 });
+    w.pool.spawn({ shape: 'composite', form: SWORD_FORM, a: 0, x: 0, y: -300, vy: 270, faceVelocity: true, damage: 10, owner: 'ulysses', flags: SWORD_FLAGS.sword, noPop: true, armDelay: 5 });
     for (let i = 0; i < 120; i++) {
       w.step(STILL, STEP);
       w.soul.iframes = 1;

@@ -44,7 +44,7 @@ export const prismSwordSplit: Interaction = {
           if (!pointInTriangle(b.x, b.y, tri)) continue;
           const { x, y, vx, vy } = b;
           const style = {
-            shape: b.shape, a: b.a, b: b.b, damage: b.damage, owner: b.owner, kind: b.kind,
+            shape: b.shape, form: b.form ?? undefined, a: b.a, b: b.b, damage: b.damage, owner: b.owner, kind: b.kind,
             faceVelocity: true, noPop: true, flags: SWORD_FLAGS.sword | SWORD_FLAGS.split,
           };
           world.pool.release(b, 'cleared');

@@ -40,7 +40,7 @@ export interface GameEvents {
    */
   comboTriggered: { id: string; x: number; y: number; count: number; at?: number };
   /** Ulysses' phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */
-  ulyssesPhaseChanged: { owner: string; phase: 'summon' | 'swipe' | 'rain' | 'breather'; next: 'summon' | 'swipe' | 'rain' };
+  ulyssesPhaseChanged: { owner: string; phase: 'summon' | 'axe' | 'rain' | 'breather'; next: 'summon' | 'axe' | 'rain' };
   /** The equipped active ability was used (Shift). */
   abilityUsed: { id: string };
   /** Shift was pressed while the active ability was still recharging (nothing happened). */

@@ -1,5 +1,5 @@
 import { Ulysses } from '../characters/ulysses/Ulysses';
-import { SWORD_FLAGS, ulyssesConfig } from '../characters/ulysses/ulysses.config';
+import { SWORD_FLAGS, SWORD_FORM } from '../characters/ulysses/ulysses.config';
 import { installInteractions } from '../director/interactions';
 import { Mortimer } from '../characters/mortimer/Mortimer';
 import Phaser from 'phaser';
@@ -26,7 +26,7 @@ import type { CharacterHandle } from '../characters/Character';
  * Box: Q/E rotate -/+30 deg · R +90 · T +180 · F resize small/default · G move · V fast squeeze left
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
  * Mortimer (level 20 params, fired now from off screen): J snowfall · K snowball roll · L blizzard
- * Ulysses (level 20 params): U summon · Y side swipe · O sword rain
+ * Ulysses (level 20 params): U summon · Y axe swing · O sword rain
  * Combos: X sword through a refraction prism (Prism + Ulysses) · . toggle Mortimer's blizzard phase (swords sync)
  */
 export class DebugScene extends Phaser.Scene {
@@ -132,7 +132,7 @@ export class DebugScene extends Phaser.Scene {
       K: () => this.mortimer.fireNow('roll', 20),
       L: () => this.mortimer.fireNow('blizzard', 20),
       U: () => this.ulysses.fireNow('summon', 20),
-      Y: () => this.ulysses.fireNow('swipe', 20),
+      Y: () => this.ulysses.fireNow('axe', 20),
       O: () => this.ulysses.fireNow('rain', 20),
       X: () => this.prismCombo(),
       PERIOD: () => {
@@ -166,9 +166,8 @@ export class DebugScene extends Phaser.Scene {
     if (!w.props.some((p) => p.refracts)) {
       w.props.push({ shape: 'triangle', x: 0, y: 0, r: px(28), rotation: -Math.PI / 2, color: theme.prism, refracts: true });
     }
-    const r = ulyssesConfig.rules;
     w.pool.spawn({
-      shape: 'beam', a: r.swordLength, b: r.swordWidth, x: -w.box.halfWidth - px(40), y: 0, vx: px(180), faceVelocity: true,
+      shape: 'composite', form: SWORD_FORM, a: 0, x: -w.box.halfWidth - px(40), y: 0, vx: px(180), faceVelocity: true,
       damage: 10, owner: 'ulysses', kind: 'white', noPop: true, flags: SWORD_FLAGS.sword,
     });
   }

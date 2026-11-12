@@ -1,7 +1,8 @@
 import type { CharacterConfig } from '../config';
-import { px } from '../../tuning';
+import { px, SOUL_RADIUS } from '../../tuning';
+import { makeForm, type CompositeForm } from '../../combat/composite';
 
-export type UlyssesAttack = 'summon' | 'swipe' | 'rain';
+export type UlyssesAttack = 'summon' | 'axe' | 'rain';
 
 export interface UlyssesRules {
   /** Seconds each phase lasts (shines fall inside it). */
@@ -10,16 +11,18 @@ export interface UlyssesRules {
   breather: number;
   /** Phase order; one phase per unlocked attack. */
   phaseOrder: readonly UlyssesAttack[];
-  /** Sword: a long thin rect (beam shape), length and thickness (px). */
+  /** Sword: overall length (px, pommel to tip) and crossguard half-width (its widest part). */
   swordLength: number;
   swordWidth: number;
   /** Gap between the box wall and the nearest point of a forming sword (px). */
   formGap: number;
   /** Summon: slots along one edge where swords can form. */
   summonSlots: number;
-  /** Side swipe: blade thickness (px) and seconds between two back-to-back swipes. */
-  swipeThickness: number;
-  swipeGap: number;
+  /** Axe: how far past the wall it rests before the swing (rad), seconds between two back-to-back swings. */
+  axeRest: number;
+  axeGap: number;
+  /** Sword rain: guaranteed clear opening in every row (px), wider than the soul's diameter. */
+  rainGap: number;
 }
 
 /**
@@ -28,8 +31,8 @@ export interface UlyssesRules {
  * phases (one per attack, phaseLength s, breather between); an attack's beat is its shine time.
  * Params per attack (all [bandStart, bandEnd]); distances/speeds are px(original 640x480 value):
  *  summon: cooldown s, damage, speed px/s (flight), count (swords), grow s (gold time; lower = harder)
- *  swipe:  cooldown s, damage, speed px/s (sweep), coverage (share of the side), double (chance of a second swipe), windup s (gold time; lower = harder)
- *  rain:   cooldown s, damage, speed px/s (drop), count (swords), stagger s (between shines; lower = harder), windup s (gold time before the first shine), fallGap s (shine to drop; lower = harder)
+ *  axe:    cooldown s, damage, speed rad/s (swing), arc rad (swing angle), reach px (pivot to axe head), double (chance of a second corner), windup s (gold time; lower = harder)
+ *  rain:   cooldown s, damage, speed px/s (drop), count (swords), jitter s (spread of the shines; lower = harder), windup s (gold time), fallGap s (shine to drop; lower = harder)
  */
 export const ulyssesConfig: CharacterConfig<UlyssesAttack, UlyssesRules> = {
   id: 'ulysses',
@@ -47,7 +50,7 @@ export const ulyssesConfig: CharacterConfig<UlyssesAttack, UlyssesRules> = {
       to: 14,
       attacks: {
         summon: { cooldown: [1.4, 1.1], damage: [7, 10], speed: [px(158), px(172)], count: [2, 3], grow: [1.0, 0.85] },
-        swipe: { cooldown: [3.0, 2.4], damage: [8, 11], speed: [px(160), px(200)], coverage: [0.45, 0.6], double: [0, 0.15], windup: [1.0, 0.9] },
+        axe: { cooldown: [3.0, 2.4], damage: [8, 11], speed: [2.6, 3.2], arc: [1.1, 1.3], reach: [px(110), px(125)], double: [0, 0.15], windup: [1.0, 0.9] },
       },
     },
     {
@@ -55,30 +58,64 @@ export const ulyssesConfig: CharacterConfig<UlyssesAttack, UlyssesRules> = {
       to: 20,
       attacks: {
         summon: { cooldown: [1.1, 0.9], damage: [10, 12], speed: [px(172), px(185)], count: [3, 4], grow: [0.85, 0.7] },
-        swipe: { cooldown: [2.4, 2.0], damage: [11, 14], speed: [px(200), px(230)], coverage: [0.6, 0.7], double: [0.2, 0.5], windup: [0.9, 0.8] },
-        rain: { cooldown: [3.4, 2.8], damage: [10, 13], speed: [px(200), px(240)], count: [6, 9], stagger: [0.18, 0.12], windup: [1.0, 0.85], fallGap: [0.35, 0.2] },
+        axe: { cooldown: [2.4, 2.0], damage: [11, 14], speed: [3.2, 4.0], arc: [1.3, 1.55], reach: [px(125), px(140)], double: [0.2, 0.5], windup: [0.9, 0.8] },
+        rain: { cooldown: [3.4, 2.8], damage: [10, 13], speed: [px(200), px(240)], count: [18, 27], jitter: [0.12, 0.08], windup: [1.0, 0.85], fallGap: [0.35, 0.2] },
       },
     },
   ],
   rules: {
     phaseLength: 8,
     breather: 1,
-    phaseOrder: ['summon', 'swipe', 'rain'],
+    phaseOrder: ['summon', 'axe', 'rain'],
     swordLength: px(40),
-    swordWidth: px(5),
+    swordWidth: px(16 / 3),
     formGap: px(10),
     summonSlots: 6,
-    swipeThickness: px(10),
-    swipeGap: 0.7,
+    axeRest: 0.32,
+    axeGap: 0.7,
+    rainGap: SOUL_RADIUS * 2 + px(5),
   },
 };
 
 /** Bullet flags on Ulysses' projectiles (owner 'ulysses'). Combo rules read these. */
 export const SWORD_FLAGS = {
-  /** A thrown sword (summon or rain), as opposed to the side-swipe blade. */
+  /** A thrown sword (summon or rain), as opposed to the axe. */
   sword: 1,
   /** Internal: the rain hook has set this sword's shine order. */
   ordered: 2,
   /** Came out of a refraction prism (Prism combo); ignores prisms from now on. */
   split: 4,
 } as const;
+
+/**
+ * Sword (pointing +x, origin at its middle, 60 px long): blade, tip, crossguard, grip, pommel.
+ * Drawn and collided from these parts (combat/composite.ts).
+ */
+export const SWORD_FORM: CompositeForm = makeForm([
+  { kind: 'rect', x: 7, y: 0, hw: 17, hh: 2.5 }, // blade
+  { kind: 'tri', ax: 24, ay: -2.5, bx: 24, by: 2.5, cx: 30, cy: 0 }, // tip
+  { kind: 'rect', x: -11, y: 0, hw: 1.5, hh: 8 }, // crossguard
+  { kind: 'rect', x: -19.25, y: 0, hw: 6.75, hh: 1.75 }, // grip
+  { kind: 'circle', x: -27.5, y: 0, r: 2.5 }, // pommel
+]);
+
+const axeForms = new Map<string, CompositeForm>();
+/**
+ * Axe (origin = the pivot at the box corner, handle along +x out to `reach`), with its blade on
+ * side `side` (+1 = local +y, the leading side when it swings toward increasing angle).
+ */
+export function axeForm(reach: number, side: 1 | -1): CompositeForm {
+  const key = `${reach.toFixed(2)}:${side}`;
+  let f = axeForms.get(key);
+  if (!f) {
+    const R = reach;
+    f = makeForm([
+      { kind: 'rect', x: (R + 8) / 2, y: 0, hw: (R - 20) / 2, hh: 3 }, // handle (starts 14 px from the pivot)
+      { kind: 'rect', x: R - 14, y: side * 10, hw: 9, hh: 12 }, // head
+      { kind: 'tri', ax: R - 26, ay: side * 20, bx: R - 2, by: side * 20, cx: R - 14, cy: side * 30 }, // edge
+      { kind: 'tri', ax: R - 18, ay: -side * 3, bx: R - 10, by: -side * 3, cx: R - 14, cy: -side * 10 }, // back spike
+    ]);
+    axeForms.set(key, f);
+  }
+  return f;
+}

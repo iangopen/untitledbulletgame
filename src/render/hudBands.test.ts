@@ -3,25 +3,26 @@ import { World } from '../core/World';
 import { STEP } from '../core/Clock';
 import { Director } from '../director/Director';
 import { TimerMode } from '../director/modes/TimerMode';
-import { bulletExtent, bulletRect, rectCorners, type Bullet } from '../combat/Bullet';
+import { Bullet, rectCorners } from '../combat/Bullet';
+import { bulletPrimitives } from '../combat/composite';
+import { interpBullet } from './interp';
 import { hud, theme, VIEW } from './theme';
 
-/** World-space AABB of a bullet's full-size shape (rect corners for beams/rects), clipped to the screen; null if fully off screen. */
+/** World-space AABB of a bullet's full-size exact shape (every primitive), clipped test to the screen; null if fully off screen. */
 function screenAabb(w: World, b: Bullet): { x0: number; y0: number; x1: number; y1: number } | null {
-  let x0: number, y0: number, x1: number, y1: number;
-  if (b.shape === 'beam' || b.shape === 'rect') {
-    const r = bulletRect(b, { x: 0, y: 0, hw: 0, hh: 0, rotation: 0 });
-    const s = b.scale || 1; // full size even while growing in
-    r.hw /= s;
-    r.hh /= s;
-    const pts = rectCorners(r, [0, 1, 2, 3].map(() => ({ x: 0, y: 0 }))).map((q) => w.box.toWorld(q));
-    x0 = Math.min(...pts.map((q) => q.x)); x1 = Math.max(...pts.map((q) => q.x));
-    y0 = Math.min(...pts.map((q) => q.y)); y1 = Math.max(...pts.map((q) => q.y));
-  } else {
-    const p = w.box.toWorld(b);
-    const e = bulletExtent(b);
-    x0 = p.x - e; x1 = p.x + e; y0 = p.y - e; y1 = p.y + e;
-  }
+  const full = interpBullet(b, 1, new Bullet());
+  full.armed = true; // full size even while growing in
+  full.noPop = true;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const add = (x: number, y: number, r = 0) => {
+    const p = w.box.toWorld({ x, y });
+    x0 = Math.min(x0, p.x - r); x1 = Math.max(x1, p.x + r); y0 = Math.min(y0, p.y - r); y1 = Math.max(y1, p.y + r);
+  };
+  bulletPrimitives(full, (p) => {
+    if (p.kind === 'circle') add(p.c.x, p.c.y, p.c.r);
+    else if (p.kind === 'tri') { add(p.t.ax, p.t.ay); add(p.t.bx, p.t.by); add(p.t.cx, p.t.cy); }
+    else for (const q of rectCorners(p.r, [0, 1, 2, 3].map(() => ({ x: 0, y: 0 })))) add(q.x, q.y);
+  });
   if (x1 < 0 || x0 > VIEW.width || y1 < 0 || y0 > VIEW.height) return null;
   return { x0, y0, x1, y1 };
 }

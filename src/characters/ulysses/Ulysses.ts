@@ -4,7 +4,7 @@ import { nextPhaseArrival, phaseAt, type PhaseState } from '../phases';
 import type { ArmHook, Bullet, StepHook, Wall } from '../../combat/Bullet';
 import { line, lineSlots, type BulletStyle } from '../../combat/patterns';
 import { theme } from '../../render/theme';
-import { SWORD_FLAGS, ulyssesConfig, type UlyssesAttack, type UlyssesRules } from './ulysses.config';
+import { SWORD_FLAGS, SWORD_FORM, axeForm, ulyssesConfig, type UlyssesAttack, type UlyssesRules } from './ulysses.config';
 
 export type UlyssesPhaseState = PhaseState<UlyssesAttack>;
 
@@ -23,13 +23,14 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
   readonly config = ulyssesConfig;
   protected readonly attacks = {
     summon: (p: ResolvedAttack) => this.planSummon(p),
-    swipe: (p: ResolvedAttack) => this.planSwipe(p),
+    axe: (p: ResolvedAttack) => this.planAxe(p),
     rain: (p: ResolvedAttack) => this.planRain(p),
   };
   protected override readonly preFireOpening = false;
   /** Phase as of the last step ('' until the first tick). */
   phase: UlyssesAttack | 'breather' | '' = '';
   private lastEdge: Wall | null = null;
+  private lastCorner = -1;
 
   private get rules(): UlyssesRules {
     return this.config.rules;
@@ -48,8 +49,8 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
   protected override nextArrival(id: UlyssesAttack, at: number): number {
     const p = this.resolved.attacks[id];
     let tail = 0;
-    if (p && id === 'swipe' && p.double! > 0) tail = this.rules.swipeGap;
-    if (p && id === 'rain') tail = (p.count! - 1) * p.stagger!;
+    if (p && id === 'axe' && p.double! > 0) tail = this.rules.axeGap;
+    if (p && id === 'rain') tail = p.jitter!;
     return nextPhaseArrival(this.rules, this.order, id, at, tail);
   }
 
@@ -74,11 +75,10 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
     return e;
   }
 
-  /** A thrown sword: white once active, gold (growing) for `gold` seconds before. */
+  /** A thrown sword (composite: blade, crossguard, grip, pommel): white once active, gold (growing) for `gold` s before. */
   private swordStyle(p: ResolvedAttack, gold: number, rotation: number, extra: Partial<BulletStyle> = {}): BulletStyle {
-    const r = this.rules;
     return {
-      shape: 'beam', a: r.swordLength, b: r.swordWidth, rotation, damage: p.damage!, owner: this.id, kind: 'white',
+      shape: 'composite', form: SWORD_FORM, a: 0, rotation, damage: p.damage!, owner: this.id, kind: 'white',
       noPop: true, armDelay: gold, growIn: true, flags: SWORD_FLAGS.sword, ...extra,
     };
   }
@@ -111,59 +111,79 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
     };
   }
 
-  // --- Side swipe: a long blade forms along one side, shines, sweeps across ---------
-  private planSwipe(p: ResolvedAttack): Shot[] {
-    const shots: Shot[] = [{ lead: p.windup!, fire: () => this.spawnBlade(p, this.pickEdge()) }];
-    // Sometimes a second swipe from another side, swipeGap after the first shine.
-    if (this.rng() < p.double!) shots.push({ lead: p.windup! - this.rules.swipeGap, fire: () => this.spawnBlade(p, this.pickEdge()) });
+  // --- Axe swing: forms at a box corner, shines, swings in an arc around that corner -----
+  private planAxe(p: ResolvedAttack): Shot[] {
+    const shots: Shot[] = [{ lead: p.windup!, fire: () => this.spawnAxe(p, this.pickCorner()) }];
+    // Sometimes a second corner, axeGap after the first shine.
+    if (this.rng() < p.double!) shots.push({ lead: p.windup! - this.rules.axeGap, fire: () => this.spawnAxe(p, this.pickCorner()) });
     return shots;
   }
 
+  /** Corner index 0..3 = (-,-), (+,-), (+,+), (-,+) in box-local signs; never the same twice in a row. */
+  private pickCorner(): number {
+    let c: number;
+    do c = Math.floor(this.rng() * 4);
+    while (c === this.lastCorner);
+    this.lastCorner = c;
+    return c;
+  }
+
   /**
-   * One blade: a beam lying along `edge`, `coverage` of its length, at a random place along it,
-   * just outside the wall. Box-local like every bullet, so it follows a rotated box exactly; its
-   * drawn rect is its hitbox through the whole sweep (it translates, never deforms).
+   * One axe pivoting on box corner `corner`. It rests just outside the box (axeRest past one wall
+   * line, gold), shines, then rotates toward the other wall at `speed` rad/s through `arc`, sweeping
+   * the area near the corner. The bullet's position IS the pivot and is kept on the current corner
+   * every step, and its parts rotate with it, so the drawn axe is the hitbox through the whole arc,
+   * in a moved, rotated or resized box.
    */
-  private spawnBlade(p: ResolvedAttack, edge: Wall): void {
+  private spawnAxe(p: ResolvedAttack, corner: number): void {
     const { box, pool } = this.world;
-    const [nx, ny] = INWARD[edge];
-    const alongX = ny !== 0; // top/bottom: the blade lies along x
-    const side = alongX ? box.width : box.height;
-    const len = p.coverage! * side;
-    const along = (this.rng() - 0.5) * (side - len);
-    const off = (alongX ? box.halfHeight : box.halfWidth) + this.formOffset(this.rules.swipeThickness / 2);
+    const cx = corner === 1 || corner === 2 ? 1 : -1;
+    const cy = corner >= 2 ? 1 : -1;
+    // Directions from the corner along its two walls, into the box.
+    const alongX = Math.atan2(0, -cx);
+    const alongY = Math.atan2(-cy, 0);
+    const [from, to] = this.rng() < 0.5 ? [alongX, alongY] : [alongY, alongX];
+    const sign: 1 | -1 = Math.sin(to - from) > 0 ? 1 : -1;
+    const start = from - sign * this.rules.axeRest;
+    const end = start + sign * p.arc!;
     const speed = p.speed!;
     pool.spawn({
-      shape: 'beam', a: len, b: this.rules.swipeThickness, rotation: alongX ? 0 : Math.PI / 2,
-      x: alongX ? along : -nx * off, y: alongX ? -ny * off : along,
+      shape: 'composite', form: axeForm(p.reach!, sign), a: 0, rotation: start,
+      x: cx * box.halfWidth, y: cy * box.halfHeight,
       damage: p.damage!, owner: this.id, kind: 'white', noPop: true, armDelay: p.windup!, growIn: true,
-      onArm: (b) => {
-        b.vx = nx * speed;
-        b.vy = ny * speed;
+      onStep: (b: Bullet, dt: number) => {
+        b.x = cx * this.world.box.halfWidth;
+        b.y = cy * this.world.box.halfHeight;
+        if (!b.armed || b.lifetime !== Infinity) return;
+        const left = (end - b.rotation) * sign;
+        b.rotation += sign * Math.min(left, speed * dt);
+        if (left <= speed * dt) b.lifetime = b.age + 0.05; // swing done: gone next step or so
       },
     });
   }
 
-  // --- Sword rain: a row forms above the box, shines in random order, drops -----------
+  // --- Sword rain: a dense row forms above the box, shines almost at once, drops -------
+  /**
+   * `count` slots across the top edge with ONE contiguous opening at least rainGap wide between
+   * the nearest crossguards (wider than the soul), at a random place, so every row is dodgeable
+   * without a dash.
+   */
   private planRain(p: ResolvedAttack): Shot[] {
     const { box, pool } = this.world;
     const count = p.count!;
-    const style = this.swordStyle(p, p.windup!, Math.PI / 2, { onStep: this.rainHook(p, count) });
+    const style = this.swordStyle(p, p.windup!, Math.PI / 2, { onStep: this.rainHook(p) });
     const opts = { edge: 'top' as const, count, speed: 0, offset: this.formOffset(this.rules.swordLength / 2), style };
-    return [{ lead: p.windup!, fire: () => void line(pool, box, opts) }];
+    const gapSize = rainGapSlots(box.width, count, this.rules.swordWidth, this.rules.rainGap);
+    const gapAt = this.rng();
+    return [{ lead: p.windup!, fire: () => void line(pool, box, { ...opts, gapSize, gapAt }) }];
   }
 
-  /**
-   * Each sword of a row takes the next place in a shuffled shine order on its first step (shines
-   * stagger s apart), then drops fallGap after its shine.
-   */
-  private rainHook(p: ResolvedAttack, count: number): StepHook {
-    const order = this.shuffled(count);
-    let next = 0;
+  /** Each sword shines up to `jitter` s after the row's beat (nearly together), then drops fallGap later. */
+  private rainHook(p: ResolvedAttack): StepHook {
     return (b: Bullet) => {
       if (!(b.flags & SWORD_FLAGS.ordered)) {
         b.flags |= SWORD_FLAGS.ordered;
-        b.armAt += (order[next++ % count] ?? 0) * p.stagger!;
+        b.armAt += this.rng() * p.jitter!;
       }
       if (b.armed && b.vy === 0 && b.age >= b.armAt + p.fallGap!) {
         b.vy = p.speed!;
@@ -185,4 +205,13 @@ export class Ulysses extends Character<UlyssesAttack, UlyssesRules> {
   private gapsFor(slots: number, count: number): number[] {
     return this.shuffled(slots).slice(Math.min(count, slots));
   }
+}
+
+/**
+ * Empty slots needed so the opening between the crossguards beside the gap is at least `gap` px:
+ * with slot spacing s, k empty slots leave (k + 1) * s - 2 * halfWidth.
+ */
+export function rainGapSlots(span: number, count: number, halfWidth: number, gap: number): number {
+  const s = span / count;
+  return Math.max(1, Math.ceil((gap + 2 * halfWidth) / s - 1 - 1e-9));
 }
