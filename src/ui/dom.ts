@@ -21,7 +21,7 @@ export function at<T extends HTMLElement | SVGElement>(el: T, x: number, y: numb
   return el;
 }
 
-export type ShapeKind = 'triangle' | 'circle' | 'square';
+export type ShapeKind = 'triangle' | 'circle' | 'square' | 'snowman';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -34,7 +34,16 @@ export function shape(kind: ShapeKind, color: number, r: number, outline = false
   svg.setAttribute('height', String(size));
   svg.setAttribute('viewBox', `${-r - pad} ${-r - pad} ${size} ${size}`);
   let node: SVGElement;
-  if (kind === 'circle') {
+  if (kind === 'snowman') {
+    // Three stacked circles, small on top, filling the 2r height.
+    node = document.createElementNS(SVG_NS, 'g');
+    for (const [cy, cr] of [[0.59, 0.41], [-0.15, 0.33], [-0.74, 0.26]] as const) {
+      const c = document.createElementNS(SVG_NS, 'circle');
+      c.setAttribute('cy', String(cy * r));
+      c.setAttribute('r', String(cr * r));
+      node.appendChild(c);
+    }
+  } else if (kind === 'circle') {
     node = document.createElementNS(SVG_NS, 'circle');
     node.setAttribute('r', String(r));
   } else {

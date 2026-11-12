@@ -26,6 +26,8 @@ export const theme = {
   },
   /** Character accent colors (one per character; never red). */
   prism: 0x3de8ff,
+  /** Mortimer: pale ice, darker and cooler than white projectiles and far lighter than blue ones. */
+  mortimer: 0xb4d4e0,
   /** Non-damaging props (e.g. refraction prism) draw as translucent fill + outline. */
   propFillAlpha: 0.18,
   /**

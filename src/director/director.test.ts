@@ -119,15 +119,17 @@ describe('interactions', () => {
 
 describe('roster data', () => {
   it('parses ?roster=prism:12 and clamps / ignores junk', () => {
-    expect(parseRosterParam('prism:12')).toEqual({ prism: 12 });
-    expect(parseRosterParam('prism:99')).toEqual({ prism: 20 });
-    expect(parseRosterParam('prism:-4,nobody:5')).toEqual({ prism: 0 });
+    expect(parseRosterParam('prism:12')).toEqual({ prism: 12, mortimer: 0 });
+    expect(parseRosterParam('prism:12,mortimer:10')).toEqual({ prism: 12, mortimer: 10 });
+    expect(parseRosterParam('mortimer:25')).toEqual({ prism: 0, mortimer: 20 });
+    expect(parseRosterParam('prism:99')).toEqual({ prism: 20, mortimer: 0 });
+    expect(parseRosterParam('prism:-4,nobody:5')).toEqual({ prism: 0, mortimer: 0 });
     expect(parseRosterParam('nobody:5')).toBeNull();
     expect(parseRosterParam('prism')).toBeNull();
     expect(parseRosterParam(null)).toBeNull();
   });
   it('normalizes to every registered id and sums levels', () => {
-    expect(normalizeRoster({})).toEqual({ prism: 0 });
+    expect(normalizeRoster({})).toEqual({ prism: 0, mortimer: 0 });
     expect(totalLevel({ prism: 7 })).toBe(7);
   });
 });

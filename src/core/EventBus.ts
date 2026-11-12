@@ -20,6 +20,8 @@ export interface GameEvents {
    * phase that follows (for a breather) or the current one.
    */
   prismPhaseChanged: { owner: string; phase: 'wall' | 'ray' | 'breather'; next: 'wall' | 'ray' };
+  /** Mortimer's phase changed (one phase per unlocked attack; 'breather' = no new arrivals). */
+  mortimerPhaseChanged: { owner: string; phase: 'snowfall' | 'roll' | 'blizzard' | 'breather'; next: 'snowfall' | 'roll' | 'blizzard' };
   /** A resize was requested (target size after the min-size clamp). anchor = fixed wall or 'center'. */
   boxResized: { width: number; height: number; duration: number; anchor: string };
   /** A move was requested (world-space target center). */

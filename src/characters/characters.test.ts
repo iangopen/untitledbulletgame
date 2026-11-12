@@ -60,6 +60,7 @@ describe('validateConfig', () => {
   it('accepts a good config and every registered character config', () => {
     expect(validateConfig(cfg)).toEqual([]);
     expect(validateConfig(prismConfig)).toEqual([]);
+    for (const e of registry) expect(e.id).toBeTruthy();
   });
   it('catches gaps, dropped attacks and bad cooldowns', () => {
     const bad: CharacterConfig<T> = {

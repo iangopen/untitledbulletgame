@@ -89,7 +89,7 @@ export class RosterScene extends Phaser.Scene {
     let level: HTMLElement | null = null;
     if (entry) {
       el.append(
-        at(shape(entry.shape === 'triangle' || entry.shape === 'circle' || entry.shape === 'square' ? entry.shape : 'square', entry.color, 34), 0, SHAPE_Y),
+        at(shape(entry.shape, entry.color, 34), 0, SHAPE_Y),
         at(h('div', 'name t-body', entry.name), 0, NAME_Y),
       );
       level = at(h('div', 'level t-number mono', '0'), 0, LEVEL_Y);

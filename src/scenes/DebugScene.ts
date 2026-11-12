@@ -1,3 +1,4 @@
+import { Mortimer } from '../characters/mortimer/Mortimer';
 import Phaser from 'phaser';
 import { PROJECTILE_TYPES } from '../combat/projectile';
 import { World } from '../core/World';
@@ -21,6 +22,7 @@ import type { CharacterHandle } from '../characters/Character';
  * 7 KR ring · 8 bouncing triangles · 0 stress (+300) · C clear · I invincible · H hitboxes · ` back
  * Box: Q/E rotate -/+30 deg · R +90 · T +180 · F resize small/default · G move · V fast squeeze left
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
+ * Mortimer (level 20 params, fired now from off screen): J snowfall · K snowball roll · L blizzard
  */
 export class DebugScene extends Phaser.Scene {
   private world!: World;
@@ -37,6 +39,7 @@ export class DebugScene extends Phaser.Scene {
   private chaosT = 0;
   private boxText!: Phaser.GameObjects.Text;
   private prism!: CharacterHandle;
+  private mortimer!: Mortimer;
 
   constructor() {
     super('Debug');
@@ -50,14 +53,18 @@ export class DebugScene extends Phaser.Scene {
     this.view = new BattleView(this, this.world);
     this.view.showHitboxes = true;
     this.prism = characterById('prism')!.create(this.world);
-    this.events.once('shutdown', () => this.prism.dispose());
+    this.mortimer = new Mortimer(this.world, 2);
+    this.events.once('shutdown', () => {
+      this.prism.dispose();
+      this.mortimer.dispose();
+    });
     this.loop = new FixedLoop(this);
     this.stepSamples = [];
     const mono = { fontFamily: fonts.mono, fontSize: `${type.hint}px`, color: toCss(theme.textDim) };
     this.readout = this.add.text(16, 12, '', { ...mono, color: toCss(theme.text) }).setResolution(renderScale());
     this.boxText = this.add.text(16, 80, '', { ...mono, color: toCss(theme.textDim) }).setResolution(renderScale());
     this.add
-      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
+      .text(width / 2, height - 50, '1 line 2 fan 3 ring 4 aimed 5 rects 6 split 7 KR 8 bounce 9 types 0 stress\nC clear  I invincible  H hitboxes  P prism 0/20  J/K/L mortimer  ` back\nbox: Q/E rot30  R 90  T 180  F size  G move  V/B squeeze  N walls  M motion  Z reset', { ...mono, align: 'center' })
       .setOrigin(0.5)
       .setResolution(renderScale());
 
@@ -108,6 +115,9 @@ export class DebugScene extends Phaser.Scene {
       N: () => this.cycleWalls(),
       M: () => (this.chaos = !this.chaos),
       P: () => this.prism.setLevel(this.prism.level === 20 ? 0 : 20),
+      J: () => this.mortimer.fireNow('snowfall', 20),
+      K: () => this.mortimer.fireNow('roll', 20),
+      L: () => this.mortimer.fireNow('blizzard', 20),
       Z: () => {
         this.chaos = false;
         this.small = false;
@@ -120,6 +130,7 @@ export class DebugScene extends Phaser.Scene {
       world: this.world, view: this.view, loop: this.loop, game: this.game, fire, box: box_,
       setChaos: (v: boolean) => (this.chaos = v),
       prism: () => this.prism,
+      mortimer: () => this.mortimer,
       setInvincible: (v: boolean) => (this.invincible = v),
     };
   }

@@ -6,7 +6,7 @@ import { FixedLoop } from './FixedLoop';
 import { Director } from '../director/Director';
 import { TimerMode } from '../director/modes/TimerMode';
 import { DEFAULT_ROSTER, normalizeRoster, type Roster } from '../director/roster';
-import { registry, type CharacterEntry } from '../characters/registry';
+import { registry } from '../characters/registry';
 import { at, h, replay, shape } from '../ui/dom';
 import { enter, go, mountScreen } from './ui';
 import { px } from '../tuning';
@@ -147,7 +147,7 @@ export class BattleScene extends Phaser.Scene {
     active.forEach((e, i) => {
       const box = at(h('div', 'profile'), VIEW.cx - rowW / 2 + PROFILE / 2 + i * (PROFILE + GAP), rowY);
       box.style.setProperty('--accent', toCss(e.color));
-      box.append(shape(profileShape(e), e.color, 11));
+      box.append(shape(e.shape, e.color, 11));
       this.profiles.set(e.id, box);
       screen.append(box);
     });
@@ -279,9 +279,4 @@ export class BattleScene extends Phaser.Scene {
       this.time.delayedCall(END_DELAY_MS, () => go(this, 'Results', { outcome: { ...outcome, roster: { ...outcome.roster } } }));
     }
   }
-}
-
-/** Profile icon for a character (the DOM shape helper draws triangle, circle and square). */
-function profileShape(e: CharacterEntry): 'triangle' | 'circle' | 'square' {
-  return e.shape === 'triangle' || e.shape === 'circle' ? e.shape : 'square';
 }
