@@ -44,3 +44,6 @@ Found: the bullet layer's geometry mask hid the off-screen approach, so it was r
 
 ## 2026-11-11 - The Warden, world-fixed bullets, visual tweaks, texture prewarm
 Added The Warden (slot 4): punch (decor fists shove the box with Box.moveTo, a return punch brings it home) and spin (Box.rotateTo swings). Bullets became world-fixed so a moved box runs into attacks; spawns follow the box at fire time. Spins are limited to ~25 deg because a turned 450x330 box crosses the HUD bands. Visual tweaks: fade-in instead of spawn pop and grow-in, six-armed snowflakes, wider axe head, blue toward cyan, violet refraction prism. Every look is prewarmed at battle start (0 builds mid-battle). Fixed along the way: Prism's pre-fired opening volley in the top band, Prism rays planned against a stale box, rows on a turned edge starting partly on screen, a spin stalling after two reversals.
+
+## 2026-11-11 - Multi-box World and The Warden's rip
+world.boxes + world.box (the soul's box), split/merge/reset with reframing, per-box wall hooks, boxSplit/boxMerged. The Warden rips the box (L15+), merges it offset with a punch and re-centers it. Fixed: punch returns used a merged box's off-center defaults; DebugScene merge needed the inactive tick to check for the merge.
