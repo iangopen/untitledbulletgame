@@ -39,6 +39,13 @@ export const theme = {
   glowAlpha: 0.16,
   /** The shine at the gold -> active moment. */
   shine: 0xffffff,
+  /** Active ability visuals (never red; away from the projectile colors). Shield bubble: pale lilac. */
+  shield: 0xd6c8ff,
+  /** Slow time: a cool screen tint (alpha slowTintAlpha). */
+  slowTint: 0x7f9cff,
+  slowTintAlpha: 0.12,
+  /** Blink: the start puff and the landing ring, pale ice white. */
+  blink: 0xe6f2ff,
   /** Character accent colors (one per character; never red). */
   prism: 0x3de8ff,
   /** Prism's refraction prism (a prop): light violet, kept distinct from blue projectiles (#2aa0ff). */

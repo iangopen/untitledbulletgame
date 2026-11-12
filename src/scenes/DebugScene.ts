@@ -4,6 +4,8 @@ import { installInteractions } from '../director/interactions';
 import { Mortimer } from '../characters/mortimer/Mortimer';
 import { Warden } from '../characters/warden/Warden';
 import { Ember } from '../characters/ember/Ember';
+import { ACTIVE_INFO, PASSIVE_INFO, abilityName, equipLoadout, type Loadout } from '../abilities/loadout';
+import { IFRAME_DURATION, MAX_HP, SLOW_MULTIPLIER } from '../tuning';
 import { wardenConfig } from '../characters/warden/warden.config';
 import { resolveLevel } from '../characters/config';
 import Phaser from 'phaser';
@@ -31,6 +33,7 @@ import type { CharacterHandle } from '../characters/Character';
  *      B slow squeeze right · N cycle damaging walls · M continuous motion · P prism 0/20 · Z reset box
  * Mortimer (level 20 params, fired now from off screen): J snowfall · K snowball roll · L blizzard
  * Ulysses (level 20 params): U summon · Y axe swing · O sword rain
+ * Loadout: Home cycles the active (Shift uses it), End cycles the passive.
  * Ember (level 20 params): ; embers · ' fire sweep · - wildfire
  * The Warden (level 20 params): , punch (and the return) · / toss · [ rip apart · ] merge punch · \ re-center
  * Combos: X sword through a refraction prism (Prism + Ulysses) · . toggle Mortimer's blizzard phase (swords sync)
@@ -60,12 +63,31 @@ export class DebugScene extends Phaser.Scene {
     super('Debug');
   }
 
+  private loadout: Loadout = { active: 'dash', passive: null };
+
+  /** Dev: equip the next active or passive (soul stats reset first, so passives never stack). */
+  private cycleLoadout(slot: 'active' | 'passive'): void {
+    const list = slot === 'active' ? ACTIVE_INFO : PASSIVE_INFO;
+    const i = list.findIndex((a) => a.id === this.loadout[slot]);
+    this.loadout = { ...this.loadout, [slot]: list[(i + 1) % list.length]!.id };
+    const s = this.world.soul;
+    s.maxHp = MAX_HP;
+    s.hp = MAX_HP;
+    s.iframeDuration = IFRAME_DURATION;
+    s.slowMultiplier = SLOW_MULTIPLIER;
+    s.shielded = false;
+    this.world.timeScale = 1;
+    equipLoadout(this.world, this.loadout);
+  }
+
   create(): void {
     applyView(this);
     ui.clear(); // dev scene uses Phaser text; no HTML screen
     const { width, height } = VIEW;
     this.world = new World(VIEW.cx, VIEW.cy + px(6));
     this.view = new BattleView(this, this.world);
+    this.loadout = { active: 'dash', passive: null };
+    equipLoadout(this.world, this.loadout);
     this.view.showHitboxes = true;
     this.prism = characterById('prism')!.create(this.world);
     this.mortimer = new Mortimer(this.world, 2);
@@ -147,6 +169,9 @@ export class DebugScene extends Phaser.Scene {
       U: () => this.ulysses.fireNow('summon', 20),
       Y: () => this.ulysses.fireNow('axe', 20),
       O: () => this.ulysses.fireNow('rain', 20),
+      // Loadout: HOME cycles the equipped active, END the passive (same hook as battles).
+      HOME: () => this.cycleLoadout('active'),
+      END: () => this.cycleLoadout('passive'),
       SEMICOLON: () => this.ember.fireNow('embers', 20),
       QUOTES: () => this.ember.fireNow('sweep', 20),
       MINUS: () => this.ember.fireNow('wildfire', 20),
@@ -287,7 +312,9 @@ export class DebugScene extends Phaser.Scene {
     this.readout.setText(
       `DEBUG  bullets ${w.pool.activeCount}/${w.pool.capacity}  dropped ${w.pool.dropped}\n` +
         `step avg ${avg.toFixed(3)} ms  max ${this.loop.maxStepMs.toFixed(3)} ms  (budget ${(STEP * 1000).toFixed(1)} ms)\n` +
-        `hp ${Math.ceil(w.soul.hp)}  kr ${w.soul.kr.toFixed(1)}  ${this.invincible ? 'INVINCIBLE' : ''}  prism lv ${this.prism.level} (P)`,
+        `hp ${Math.ceil(w.soul.hp)}/${w.soul.maxHp}  kr ${w.soul.kr.toFixed(1)}  ${this.invincible ? 'INVINCIBLE' : ''}  prism lv ${this.prism.level} (P)
+` +
+        `active ${abilityName(this.loadout.active, ACTIVE_INFO)} (Home)  passive ${abilityName(this.loadout.passive, PASSIVE_INFO)} (End)  time x${w.timeScale}`,
     );
     const b = w.box;
     const walls = WALLS.map((k) => `${k[0]!.toUpperCase()}:${b.walls[k].damaging ? (b.walls[k].type === 'kr' ? 'KR' : 'DMG') : 'safe'}`).join(' ');

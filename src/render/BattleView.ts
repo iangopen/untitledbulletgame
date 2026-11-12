@@ -6,7 +6,16 @@ import { bulletPrimitives, RING_TONGUES, ringTongue, type Primitive } from '../c
 import type { Circle } from '../combat/Collision';
 import { hud, line, rgb, theme, VIEW } from './theme';
 import { renderScale } from './display';
-import { px, SOUL_RADIUS } from '../tuning';
+import { BLINK_FLASH_TIME, px, SLOWTIME_DURATION, SOUL_RADIUS } from '../tuning';
+import { settings } from '../settings/store';
+import { Shield } from '../abilities/actives/Shield';
+import { SlowTime } from '../abilities/actives/SlowTime';
+import { Blink } from '../abilities/actives/Blink';
+
+/** Shield bubble: gap from the soul's edge (px), ring line width, break burst time (s). */
+const SHIELD_GAP = 7;
+const SHIELD_LINE = 2;
+const SHIELD_BREAK_FX = 0.25;
 import { BoxFrame, interpBullet, lerpPoint } from './interp';
 import { flashScreen, shakeScreen, shineShape } from './effects';
 import { LookCache, type Look } from './LookCache';
@@ -290,6 +299,9 @@ export class BattleView {
     const t = this.ib;
     const lk = this.looks;
     lk.disc(SOUL_RADIUS);
+    // Ability visuals: the bubble ring and every ring bucket the break burst and blink ring pass through.
+    lk.ring(SOUL_RADIUS + SHIELD_GAP, SHIELD_LINE);
+    for (let k = ringExp(SOUL_RADIUS); k <= ringExp((SOUL_RADIUS + SHIELD_GAP) * 2.7) + 1; k++) lk.ring(ringOf(k), SHIELD_LINE);
     lk.line(line.box);
     lk.line(line.danger);
     for (const spec of this.warmSpecs) {
@@ -410,6 +422,7 @@ export class BattleView {
     // Soul: solid circle, drawn radius == hit radius. Blinks during i-frames.
     const sl = lerpPoint(soul.prev.x, soul.prev.y, soul.pos.x, soul.pos.y, t, this.tmp2);
     this.drawTrail(sl, t);
+    this.drawAbilityFx(sl, t);
     const sw = box.toWorld(sl, this.tmp);
     const blinkOff = soul.invulnerable && Math.floor(soul.iframes / IFRAME_BLINK_PERIOD) % 2 === 0;
     if (soul.alive && !blinkOff) this.disc(this.soulSprites, sw.x, sw.y, soul.hitRadius, theme.soul, 1);
@@ -455,6 +468,51 @@ export class BattleView {
       const w = this.frame.toWorld(p, this.w[0]);
       this.disc(this.soulSprites, w.x, w.y, r * (0.45 + 0.55 * k), theme.soul, 0.35 * fade * (0.3 + 0.7 * k));
     }
+  }
+
+  /**
+   * Active ability visuals, all from cached looks. The shield bubble is gameplay information (always
+   * drawn); the shield break burst, the slow-time tint and the blink flash are purely cosmetic and
+   * follow the flash setting (Settings: screen effects).
+   */
+  private drawAbilityFx(soulLocal: Vec2, t: number): void {
+    const ab = this.world.ability;
+    if (!ab) return;
+    const cosmetic = settings.current.flash;
+    const sw = this.frame.toWorld(soulLocal, this.w[1]);
+    const R = SOUL_RADIUS + SHIELD_GAP;
+    if (ab instanceof Shield) {
+      if (ab.active) {
+        // Bubble: faint fill plus a ring; it thins and blinks in its last half second.
+        const warn = ab.left < 0.5 && Math.floor(ab.left * 10) % 2 === 0;
+        this.disc(this.soulSprites, sw.x, sw.y, R, theme.shield, 0.16);
+        const ring = this.looks.ring(R, SHIELD_LINE);
+        this.soulSprites.next(ring).setPosition(sw.x, sw.y).setScale(1 / ring.k).setTint(theme.shield).setAlpha(warn ? 0.45 : 0.95);
+      } else if (ab.ended && ab.endedAge < SHIELD_BREAK_FX && (ab.ended === 'expired' || cosmetic)) {
+        // Break: the ring bursts outward and fades (expiry: a short quiet fade in place).
+        const k = ab.endedAge / SHIELD_BREAK_FX;
+        const r = ab.ended === 'broke' ? R * (1 + 1.6 * k) : R;
+        const ring = this.looks.ring(ringBucket(r), SHIELD_LINE);
+        this.shineSprites.next(ring).setPosition(sw.x, sw.y).setScale(r / ring.size / ring.k).setTint(theme.shield).setAlpha((ab.ended === 'broke' ? 0.9 : 0.5) * (1 - k));
+      }
+    } else if (ab instanceof SlowTime && ab.active && cosmetic) {
+      // A cool tint over the whole view, from the stretched line look (fades in and out quickly).
+      const look = this.looks.line(line.box);
+      const edge = Math.min(1, (SLOWTIME_DURATION - ab.left) / 0.15, ab.left / 0.25);
+      this.shineSprites.next(look).setPosition(VIEW.cx, VIEW.cy).setRotation(0)
+        .setScale((VIEW.width + 8) / look.size, (VIEW.height + 8) / (line.box * look.k) * 1.0)
+        .setTint(theme.slowTint).setAlpha(theme.slowTintAlpha * edge);
+    } else if (ab instanceof Blink && ab.age < BLINK_FLASH_TIME && cosmetic) {
+      // A puff where it left and a ring where it landed, fading.
+      const k = Math.max(0, ab.age) / BLINK_FLASH_TIME;
+      const a = this.frame.toWorld(ab.from, this.w[2]);
+      this.disc(this.shineSprites, a.x, a.y, SOUL_RADIUS * (1 - 0.5 * k), theme.blink, 0.7 * (1 - k));
+      const r = SOUL_RADIUS * (1.2 + 1.4 * k);
+      const ring = this.looks.ring(ringBucket(r), SHIELD_LINE);
+      const b = this.frame.toWorld(ab.to, this.w[3]);
+      this.shineSprites.next(ring).setPosition(b.x, b.y).setScale(r / ring.size / ring.k).setTint(theme.blink).setAlpha(0.85 * (1 - k));
+    }
+    void t;
   }
 
   /** Interpolation frames for boxes other than the soul's (split boxes). */

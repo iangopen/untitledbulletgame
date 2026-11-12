@@ -234,3 +234,49 @@ describe('loadout storage', () => {
     expect(mem.has(LOADOUT_KEY)).toBe(true);
   });
 });
+
+describe('slow time keeps interpolation smooth', () => {
+  it('a straight bullet draws evenly spaced at 144 Hz through the slow and back; the soul keeps full speed', async () => {
+    const { interpBullet, lerpPoint } = await import('../render/interp');
+    const { Bullet: B } = await import('../combat/Bullet');
+    const w = new World(640, 369);
+    w.ability = new SlowTime();
+    const b = w.pool.spawn({ shape: 'circle', a: 2, x: -400, y: -100, vx: 120, damage: 1, noPop: true })!;
+    const out = new B();
+    // Display frames at 144 Hz over 60 Hz steps: draw at the leftover alpha each frame.
+    let acc = 0, lastX = NaN, lastSoul = NaN;
+    const gaps: number[] = [], soulGaps: number[] = [];
+    let stepped = 0;
+    for (let f = 0; f < 144 * 3; f++) {
+      acc += 1 / 144;
+      while (acc >= STEP) {
+        acc -= STEP;
+        w.step(stepped === 30 ? press({ dx: 1, dy: 0, slow: false }) : { dx: stepped % 80 < 40 ? 1 : -1, dy: 0, slow: false }, STEP);
+        stepped++;
+      }
+      const x = interpBullet(b, acc / STEP, out).x;
+      const s = lerpPoint(w.soul.prev.x, w.soul.prev.y, w.soul.pos.x, w.soul.pos.y, acc / STEP, { x: 0, y: 0 }).x;
+      if (stepped < 2) {
+        lastX = NaN;
+        continue; // nothing has moved before the first steps
+      }
+      if (!Number.isNaN(lastX)) {
+        gaps.push(x - lastX);
+        soulGaps.push(Math.abs(s - lastSoul));
+      }
+      lastX = x;
+      lastSoul = s;
+    }
+    const scaled = gaps.filter((g) => g < (120 / 144) * 0.75);
+    // Inside the slow: every frame moves 120 * 0.45 / 144 px; outside it 120 / 144 (to float precision).
+    for (const g of gaps) {
+      const ok = Math.abs(g - (120 * SLOWTIME_SCALE) / 144) < 1e-6 || Math.abs(g - 120 / 144) < 1e-6;
+      // The frame that straddles the change blends the two rates.
+      if (!ok) expect(g).toBeGreaterThan((120 * SLOWTIME_SCALE) / 144 - 1e-6);
+      expect(g).toBeLessThan(120 / 144 + 1e-6);
+    }
+    expect(scaled.length).toBeGreaterThan(144 * SLOWTIME_DURATION * 0.9);
+    // The soul's drawn speed never drops in the slow (it isn't scaled), except at the wall turns.
+    expect(soulGaps.filter((g) => Math.abs(g - SOUL_SPEED / 144) < 1e-6).length).toBeGreaterThan(soulGaps.length * 0.9);
+  });
+});
